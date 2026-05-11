@@ -22,38 +22,34 @@
 body {
     font-family: var(--font-cuerpo);
     background-color: var(--color-gris-claro);
-    overflow-x: hidden;
-    min-height: 100vh;
+    overflow: hidden;
+    height: 100vh;
 }
 
 .login-page.container {
     display: flex;
-    flex-direction: row;
-    align-items: stretch;
-    min-height: 100vh;
+    height: 100vh;
     width: 100%;
 }
 
 /* ===== LADO IZQUIERDO ===== */
 .login-page .left-section {
-    flex: 0.50%;
-    max-width: 42%;
-    background: url('/recursos/fondo-login-1.png') left center / cover no-repeat; 
+    flex: 0.50;
+    background: url('/recursos/fondo-login-1.png') center/cover no-repeat;
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: center;
-    padding: 40px ;
+    padding: 40px;
     position: relative;
     overflow: hidden;
 }
-.left-section::before {
+.login-page .left-section::before {
     content: '';
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    display:none;
     background: rgba(0, 0, 0, 0);
     pointer-events: none;
 }
@@ -62,7 +58,6 @@ body {
 .login-page .welcome-container {
     text-align: center;
     background: transparent;
-    box-shadow: none;
     z-index: 1;
     position: relative;
     display: flex;
@@ -70,21 +65,26 @@ body {
     align-items: center;
     justify-content: center;
     width: 100%;
-    min-height: auto;
-    max-width: none;
+    height: 100%;
     padding: 0;
+    margin: 0;
+    border: none;
+    outline: none;
+    box-shadow: none;
 }
 
 .logo-container {
     position: relative;
     width: 100%;
-    max-width: 320px;
+    flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-top: 0;
-    margin-bottom: 20px;
+    margin-top: -8px;
+    border: none;
+    outline: none;
 }
+
 
 .login-page .text-container {
     text-align: center;
@@ -93,8 +93,10 @@ body {
     align-items: center;
     justify-content: center;
     width: 100%;
-    margin-top: 20px;
-    max-width: 360px;
+    flex: 1;
+    margin-top: 50px;
+    border: none;
+    outline: none;
 }
 
 .circle-illustration {
@@ -106,13 +108,12 @@ body {
     align-items: center;
     justify-content: center;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-    position: relative;
-    margin: 0 auto;
-    overflow: visible;
-    padding: 4%;
-    transform: translateX(-100px);
+    position: absolute;
+    top: 0;
+    left: 0;
+    overflow: hidden;
+    padding: 10px;
 }
-
 
 .circle-illustration img {
     width: 100%;
@@ -123,21 +124,15 @@ body {
 .circle-illustration::before {
     content: '';
 }
+
 .welcome-container h1 {
     color: var(--color-blanco);
     font-size: 55px;
     font-weight: 700;
     line-height: 1.2;
     margin-bottom: 10px;
-    margin-top: 35px;
+    margin-top: 0;
     font-family: var(--font-titulo);
-}
-
-.welcome-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
 }
 
 .welcome-container p {
@@ -150,8 +145,7 @@ body {
 
 /* ===== LADO DERECHO ===== */
 .login-page .right-section {
-    flex: 0 0 58%;
-    max-width: 58%;
+    flex: 0.65;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -165,7 +159,7 @@ body {
     padding: 50px 40px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.12);
     width: 100%;
-    max-width: 420px;
+    max-width: 450px;
 }
 
 .login-card h2 {

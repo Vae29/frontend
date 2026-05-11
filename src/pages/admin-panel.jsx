@@ -111,6 +111,9 @@ export default function AdminPanel() {
   const [filtroCategoriaCosto, setFiltroCategoriaCosto] = useState('')
   const [filtroUsuario, setFiltroUsuario] = useState('')
   const [filtroEstadoCultivo, setFiltroEstadoCultivo] = useState('')
+  const [showModalAgregarFinca, setShowModalAgregarFinca] = useState(false)
+  const [formFinca, setFormFinca] = useState({ nombre: '', ubicacion: '' })
+  const [fincasRefresh, setFincasRefresh] = useState(0)
 
   const reportRef = useRef(null)
   const cpRef = useRef(null)
@@ -141,6 +144,24 @@ export default function AdminPanel() {
   const showNotification = useCallback((message, type = 'info') => {
     setToast({ message, type })
   }, [])
+
+  const handleAgregarFinca = (e) => {
+    e.preventDefault()
+    if (!formFinca.nombre.trim() || !formFinca.ubicacion.trim()) {
+      showNotification('Por favor, completa todos los campos', 'error')
+      return
+    }
+    Agro.agregarFinca(formFinca.nombre.trim(), formFinca.ubicacion.trim())
+    showNotification(`Finca "${formFinca.nombre}" agregada exitosamente`, 'success')
+    setFormFinca({ nombre: '', ubicacion: '' })
+    setShowModalAgregarFinca(false)
+    setFincasRefresh((prev) => prev + 1)
+  }
+
+  const handleCancelAgregarFinca = () => {
+    setFormFinca({ nombre: '', ubicacion: '' })
+    setShowModalAgregarFinca(false)
+  }
 
   const resumen = Agro.computeFincaResumen(fincaId)
   const margin = resumen.ingresos > 0 ? (resumen.ganancia / resumen.ingresos) * 100 : 0
@@ -381,6 +402,139 @@ export default function AdminPanel() {
         </div>
       ) : null}
 
+      {showModalAgregarFinca && (
+        <div
+          className="modal-overlay"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 999,
+          }}
+          onClick={handleCancelAgregarFinca}
+        >
+          <div
+            className="modal-content"
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              padding: '40px',
+              maxWidth: '500px',
+              width: '90%',
+              boxShadow: '0 10px 40px rgba(0, 0, 0, 0.2)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginBottom: '30px', color: 'var(--color-verde-oscuro)', fontFamily: "var(--font-titulo, 'Playfair Display')" }}>
+              Agregar Nueva Finca
+            </h2>
+            <form onSubmit={handleAgregarFinca}>
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: 'var(--color-verde-oscuro)' }}>
+                  Nombre de la Finca
+                </label>
+                <input
+                  type="text"
+                  value={formFinca.nombre}
+                  onChange={(e) => setFormFinca({ ...formFinca, nombre: e.target.value })}
+                  placeholder="Ej: Finca El Bosque"
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    border: '2px solid #e8e8e8',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontFamily: "var(--font-cuerpo, 'Poppins')",
+                    boxSizing: 'border-box',
+                    transition: 'all 0.3s ease',
+                  }}
+                  onFocus={(e) => (e.target.style.borderColor = 'var(--color-verde-oscuro)')}
+                  onBlur={(e) => (e.target.style.borderColor = '#e8e8e8')}
+                />
+              </div>
+              <div style={{ marginBottom: '30px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: 'var(--color-verde-oscuro)' }}>
+                  Ubicación
+                </label>
+                <input
+                  type="text"
+                  value={formFinca.ubicacion}
+                  onChange={(e) => setFormFinca({ ...formFinca, ubicacion: e.target.value })}
+                  placeholder="Ej: Granada, Meta"
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    border: '2px solid #e8e8e8',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontFamily: "var(--font-cuerpo, 'Poppins')",
+                    boxSizing: 'border-box',
+                    transition: 'all 0.3s ease',
+                  }}
+                  onFocus={(e) => (e.target.style.borderColor = 'var(--color-verde-oscuro)')}
+                  onBlur={(e) => (e.target.style.borderColor = '#e8e8e8')}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={handleCancelAgregarFinca}
+                  style={{
+                    padding: '10px 24px',
+                    border: '2px solid #ddd',
+                    borderRadius: '8px',
+                    backgroundColor: '#f5f5f5',
+                    color: '#333',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontFamily: "var(--font-cuerpo, 'Poppins')",
+                    transition: 'all 0.3s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.backgroundColor = '#e0e0e0'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.backgroundColor = '#f5f5f5'
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    padding: '10px 24px',
+                    border: 'none',
+                    borderRadius: '8px',
+                    backgroundColor: 'var(--color-verde-oscuro)',
+                    color: 'white',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontFamily: "var(--font-cuerpo, 'Poppins')",
+                    transition: 'all 0.3s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.backgroundColor = '#3d5231'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.backgroundColor = 'var(--color-verde-oscuro)'
+                  }}
+                >
+                  Agregar Finca
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <Sidebar
         roleSubtitle="Rol: Administrador"
         fincaOptions={Agro.fincas}
@@ -595,7 +749,7 @@ export default function AdminPanel() {
                   Buscar
                 </button>
               </div>
-              <button type="button" className="btn-add btn-primary">
+              <button type="button" className="btn-add btn-primary" onClick={() => setShowModalAgregarFinca(true)}>
                 + Agregar Nueva Finca
               </button>
             </div>
@@ -613,36 +767,28 @@ export default function AdminPanel() {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="data-item">
-                    <td data-field="nombre">Miraflores</td>
-                    <td data-field="ubicacion">Granada, Meta</td>
-                    <td data-field="cultivos">5</td>
-                    <td data-field="acciones">
-                      <div className="action-buttons">
-                        <button type="button" className="btn-icon btn-edit" title="Editar">
-                          ✏️
-                        </button>
-                        <button type="button" className="btn-icon btn-delete" title="Eliminar">
-                          🗑️
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                  <tr className="data-item">
-                    <td data-field="nombre">Monterey</td>
-                    <td data-field="ubicacion">Acacías, Meta</td>
-                    <td data-field="cultivos">3</td>
-                    <td data-field="acciones">
-                      <div className="action-buttons">
-                        <button type="button" className="btn-icon btn-edit" title="Editar">
-                          ✏️
-                        </button>
-                        <button type="button" className="btn-icon btn-delete" title="Eliminar">
-                          🗑️
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                  {Agro.fincas.map((finca) => {
+                    const cultivosActivos = Agro.cultivos.filter(
+                      (c) => c.fincaId === finca.id && c.estado !== 'finalizado' && c.estado !== 'perdido'
+                    ).length
+                    return (
+                      <tr key={finca.id} className="data-item">
+                        <td data-field="nombre">{finca.nombre}</td>
+                        <td data-field="ubicacion">{finca.ubicacion || '--'}</td>
+                        <td data-field="cultivos">{cultivosActivos}</td>
+                        <td data-field="acciones">
+                          <div className="action-buttons">
+                            <button type="button" className="btn-icon btn-edit" title="Editar">
+                              ✏️
+                            </button>
+                            <button type="button" className="btn-icon btn-delete" title="Eliminar">
+                              🗑️
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

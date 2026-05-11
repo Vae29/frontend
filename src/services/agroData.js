@@ -25,8 +25,8 @@ export function formatCOP(value) {
 }
 
 export const fincas = [
-  { id: 'monterrey', nombre: 'Finca Monterrey' },
-  { id: 'miraflores', nombre: 'Finca Miraflores' },
+  { id: 'monterrey', nombre: 'Finca Monterrey', ubicacion: 'Acacías, Meta' },
+  { id: 'miraflores', nombre: 'Finca Miraflores', ubicacion: 'Granada, Meta' },
 ]
 
 export const cultivos = [
@@ -225,6 +225,12 @@ export function getTrabajadorCultivos(trabajadorId, fincaId) {
   const asg = asignaciones.find((a) => a.trabajadorId === trabajadorId && a.fincaId === fincaId)
   if (!asg) return []
   return asg.cultivoIds.map((id) => cultivos.find((c) => c.id === id)).filter(Boolean)
+}
+
+export function agregarFinca(nombre, ubicacion) {
+  const newId = `finca-${Date.now()}`
+  fincas.push({ id: newId, nombre, ubicacion })
+  return { id: newId, nombre, ubicacion }
 }
 
 /** Compatibilidad con código que esperaba window.AgroData */
