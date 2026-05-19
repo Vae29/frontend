@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import * as Agro from '../services/agroData'
 import { clearSession, getSession } from '../services/authSession'
 import { getInventarioElementos } from '../utils/inventarioElementos'
+import { MODAL_TYPES } from '../utils/modalConfig'
 import Header from '../components/Header'
 import Sidebar from '../components/Sidebar'
+import DynamicModal from '../components/DynamicModal'
 import { updateAdminDashboardCharts, updateRentabilidadCharts } from './admin/adminCharts'
 import { AdminReportTable } from './admin/AdminReportViews'
 import '../styles/dashboard.css'
@@ -114,6 +116,8 @@ export default function AdminPanel() {
   const [showModalAgregarFinca, setShowModalAgregarFinca] = useState(false)
   const [formFinca, setFormFinca] = useState({ nombre: '', ubicacion: '' })
   const [fincasRefresh, setFincasRefresh] = useState(0)
+  const [showDynamicModal, setShowDynamicModal] = useState(false)
+  const [dynamicModalType, setDynamicModalType] = useState(null)
 
   const reportRef = useRef(null)
   const cpRef = useRef(null)
@@ -161,6 +165,39 @@ export default function AdminPanel() {
   const handleCancelAgregarFinca = () => {
     setFormFinca({ nombre: '', ubicacion: '' })
     setShowModalAgregarFinca(false)
+  }
+
+  const handleOpenDynamicModal = (type) => {
+    setDynamicModalType(type)
+    setShowDynamicModal(true)
+  }
+
+  const handleCloseDynamicModal = () => {
+    setShowDynamicModal(false)
+    setDynamicModalType(null)
+  }
+
+  const handleSubmitDynamicModal = (formData) => {
+    // Por ahora solo mostramos la notificación
+    // Aquí es donde iría la lógica para guardar los datos según el tipo de modal
+    let successMessage = ''
+
+    switch (dynamicModalType) {
+      case MODAL_TYPES.USUARIO:
+        successMessage = `Usuario "${formData.nombre}" agregado exitosamente`
+        break
+      case MODAL_TYPES.CULTIVO:
+        successMessage = `Cultivo "${formData.nombre}" agregado exitosamente`
+        break
+      case MODAL_TYPES.COSTO:
+        successMessage = `Costo de ${formData.categoria} agregado exitosamente`
+        break
+      default:
+        successMessage = 'Datos agregados exitosamente'
+    }
+
+    showNotification(successMessage, 'success')
+    handleCloseDynamicModal()
   }
 
   const resumen = Agro.computeFincaResumen(fincaId)
@@ -382,6 +419,13 @@ export default function AdminPanel() {
 
   return (
     <div className="container">
+      <DynamicModal
+        isOpen={showDynamicModal}
+        modalType={dynamicModalType}
+        onClose={handleCloseDynamicModal}
+        onSubmit={handleSubmitDynamicModal}
+      />
+
       {toast ? (
         <div
           className={`notification ${toast.type}`}
@@ -802,7 +846,7 @@ export default function AdminPanel() {
                   Buscar
                 </button>
               </div>
-              <button type="button" className="btn-add btn-primary">
+              <button type="button" className="btn-add btn-primary" onClick={() => handleOpenDynamicModal(MODAL_TYPES.USUARIO)}>
                 + Agregar Nuevo Usuario
               </button>
             </div>
@@ -940,7 +984,7 @@ export default function AdminPanel() {
                   <option value="perdido">Perdido</option>
                 </select>
               </div>
-              <button type="button" className="btn-add btn-primary">
+              <button type="button" className="btn-add btn-primary" onClick={() => handleOpenDynamicModal(MODAL_TYPES.CULTIVO)}>
                 + Agregar Nuevo Cultivo
               </button>
             </div>
@@ -1134,7 +1178,7 @@ export default function AdminPanel() {
                 <div className="info-section" id="costos-cultivo-section">
                   <div className="section-info-header">
                     <h3>Costos del Cultivo</h3>
-                    <button type="button" className="btn-add btn-primary">
+                    <button type="button" className="btn-add btn-primary" onClick={() => handleOpenDynamicModal(MODAL_TYPES.COSTO)}>
                       + Agregar Nuevo Costo
                     </button>
                   </div>
@@ -1418,7 +1462,7 @@ export default function AdminPanel() {
                   <input type="date" className="filter-date" readOnly />
                 </div>
               </div>
-              <button type="button" className="btn-add btn-primary">
+              <button type="button" className="btn-add btn-primary" onClick={() => handleOpenDynamicModal(MODAL_TYPES.COSTO)}>
                 + Agregar Nuevo Costo
               </button>
             </div>
