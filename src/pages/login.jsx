@@ -1,40 +1,37 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getTrabajadorByEmail } from '../services/agroData'
+import { loginUser } from '../services/authApi'
 import { setSession } from '../services/authSession'
 import '../styles/login.css'
-
-const ADMIN_EMAIL = 'admin123@gmail.com'
 
 export default function Login() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    const em = email.trim().toLowerCase()
+    setIsLoading(true)
 
     if (!password) {
       window.alert('Ingrese la contraseña.')
+      setIsLoading(false)
       return
     }
 
-    if (em === ADMIN_EMAIL.toLowerCase()) {
-      setSession({ role: 'admin', email: em })
-      navigate('/admin', { replace: true })
-      return
+    const result = await loginUser(email, password)
+
+    if (result.success) {
+      const { id, email: userEmail, nombre, role } = result.data
+      setSession({ id, email: userEmail, nombre, role })
+      navigate(role === 'admin' ? '/admin' : '/worker', { replace: true })
+    } else {
+      window.alert(result.message || 'Credenciales no válidas. Intente nuevamente.')
     }
 
-    const worker = getTrabajadorByEmail(em)
-    if (worker) {
-      setSession({ role: 'worker', email: em, workerKey: worker.key, workerId: worker.id })
-      navigate('/worker', { replace: true })
-      return
-    }
-
-    window.alert('Credenciales no reconocidas. Use el correo de administrador o el de un trabajador registrado.')
+    setIsLoading(false)
   }
 
   return (
@@ -128,8 +125,8 @@ export default function Login() {
               </div>
             </div>
 
-            <button type="submit" className="login-btn">
-              Iniciar sesión
+            <button type="submit" className="login-btn" disabled={isLoading}>
+              {isLoading ? 'Autenticando...' : 'Iniciar sesión'}
             </button>
           </form>
 
