@@ -4,26 +4,52 @@ import { getModalConfig, validateForm, validateField } from '../utils/modalConfi
 /**
  * Componente de modal dinámico que cambia su contenido según el tipo
  */
-export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title }) {
+export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, submitButtonText, initialData, fieldOptions }) {
   const [formData, setFormData] = useState({})
   const [errors, setErrors] = useState({})
   const [focusedField, setFocusedField] = useState(null)
   const [showPassword, setShowPassword] = useState({})
+  const [searchFilters, setSearchFilters] = useState({})
 
-  const config = getModalConfig(modalType)
+  let config = getModalConfig(modalType)
 
-  // Inicializar formData cuando cambia el tipo de modal
+  // Actualizar opciones dinámicas si se proporcionan
+  if (fieldOptions && config) {
+    config = {
+      ...config,
+      fields: config.fields.map((field) => {
+        if (fieldOptions[field.name]) {
+          return {
+            ...field,
+            options: fieldOptions[field.name],
+          }
+        }
+        return field
+      }),
+    }
+  }
+
+  // Inicializar formData cuando cambia el tipo de modal o llegan datos iniciales
   useEffect(() => {
     if (isOpen && modalType) {
-      const initialData = {}
+      const initialState = {}
+      const initialSearch = {}
       config.fields.forEach((field) => {
-        initialData[field.name] = field.defaultValue || ''
+        if (initialData && Object.prototype.hasOwnProperty.call(initialData, field.name)) {
+          initialState[field.name] = initialData[field.name]
+        } else {
+          initialState[field.name] = field.defaultValue || (field.type === 'checkbox-group' ? [] : '')
+        }
+        if (field.type === 'checkbox-group') {
+          initialSearch[field.name] = ''
+        }
       })
-      setFormData(initialData)
+      setFormData(initialState)
       setErrors({})
       setFocusedField(null)
+      setSearchFilters(initialSearch)
     }
-  }, [isOpen, modalType])
+  }, [isOpen, modalType, initialData, fieldOptions])
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -68,57 +94,21 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title }) {
 
   return (
     <>
-      <style>{`
-        .modal-overlay input::placeholder {
-          color: #b0b0b0 !important;
-          opacity: 1 !important;
-        }
-        .modal-overlay input::-webkit-input-placeholder {
-          color: #b0b0b0 !important;
-        }
-        .modal-overlay input::-moz-placeholder {
-          color: #b0b0b0 !important;
-          opacity: 1 !important;
-        }
-        .modal-overlay input:-ms-input-placeholder {
-          color: #b0b0b0 !important;
-        }
-        .modal-overlay textarea::placeholder {
-          color: #b0b0b0 !important;
-          opacity: 1 !important;
-        }
-        .modal-overlay textarea::-webkit-input-placeholder {
-          color: #b0b0b0 !important;
-        }
-        .modal-overlay textarea::-moz-placeholder {
-          color: #b0b0b0 !important;
-          opacity: 1 !important;
-        }
-        .modal-overlay textarea:-ms-input-placeholder {
-          color: #b0b0b0 !important;
-        }
-        .dynamic-modal-input {
-          background-color: white !important;
-        }
-        .dynamic-modal-textarea {
-          background-color: white !important;
-        }
-      `}</style>
-    <div
-      className="modal-overlay"
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 999,
-      }}
-      onClick={handleCancel}
+      <div
+        className="modal-overlay"
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 999,
+        }}
+        onClick={handleCancel}
     >
       <div
         className="modal-content"
@@ -159,7 +149,124 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title }) {
                 {field.required && <span style={{ color: '#e74c3c' }}> *</span>}
               </label>
 
-              {field.type === 'select' ? (
+              {field.type === 'checkbox-group' ? (
+                <div>
+                  <input
+                    type="text"
+                    placeholder={`Buscar ${field.label.toLowerCase()}...`}
+                    value={searchFilters[field.name] || ''}
+                    onChange={(e) => {
+                      setSearchFilters((prev) => ({
+                        ...prev,
+                        [field.name]: e.target.value.toLowerCase(),
+                      }))
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      marginBottom: '12px',
+                      border: '2px solid #e8e8e8',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      fontFamily: "var(--font-cuerpo, 'Poppins')",
+                      boxSizing: 'border-box',
+                      transition: 'all 0.3s ease',
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = 'var(--color-verde-oscuro)'
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '#e8e8e8'
+                    }}
+                  />
+                  <div
+                    style={{
+                      border: `2px solid ${errors[field.name] ? '#e74c3c' : '#e8e8e8'}`,
+                      borderRadius: '8px',
+                      padding: '12px',
+                      backgroundColor: 'white',
+                      maxHeight: '250px',
+                      overflowY: 'auto',
+                    }}
+                  >
+                    {field.options && field.options.length > 0 ? (
+                      field.options
+                        .filter(
+                          (option) =>
+                            option.label.toLowerCase().includes(searchFilters[field.name] || '') ||
+                            (option.description && option.description.toLowerCase().includes(searchFilters[field.name] || ''))
+                        )
+                        .map((option) => (
+                          <label
+                            key={option.value}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              marginBottom: '10px',
+                              cursor: 'pointer',
+                              fontSize: '14px',
+                              fontFamily: "var(--font-cuerpo, 'Poppins')",
+                              padding: '8px',
+                              borderRadius: '4px',
+                              transition: 'background-color 0.2s',
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = '#f5f5f5'
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = 'transparent'
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              value={option.value}
+                              checked={
+                                Array.isArray(formData[field.name])
+                                  ? formData[field.name].includes(option.value)
+                                  : false
+                              }
+                              onChange={(e) => {
+                                const currentArray = Array.isArray(formData[field.name]) ? formData[field.name] : []
+                                const newArray = e.target.checked
+                                  ? [...currentArray, option.value]
+                                  : currentArray.filter((item) => item !== option.value)
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  [field.name]: newArray,
+                                }))
+                                if (errors[field.name]) {
+                                  setErrors((prev) => ({
+                                    ...prev,
+                                    [field.name]: '',
+                                  }))
+                                }
+                              }}
+                              style={{
+                                marginRight: '8px',
+                                marginTop: '2px',
+                                cursor: 'pointer',
+                                width: '16px',
+                                height: '16px',
+                                accentColor: 'var(--color-verde-oscuro)',
+                                flexShrink: 0,
+                              }}
+                            />
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span>{option.label}</span>
+                              {option.description && (
+                                <span style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
+                                  {option.description}
+                                </span>
+                              )}
+                            </div>
+                          </label>
+                        ))
+                    ) : (
+                      <p style={{ color: '#999', fontSize: '13px', margin: 0 }}>No hay opciones disponibles</p>
+                    )}
+                  </div>
+                </div>
+              ) : field.type === 'select' ? (
                 <select
                   name={field.name}
                   value={formData[field.name] || ''}
@@ -369,7 +476,7 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title }) {
                 e.target.style.backgroundColor = 'var(--color-verde-oscuro)'
               }}
             >
-              {config.submitButtonText}
+              {submitButtonText || config.submitButtonText}
             </button>
           </div>
         </form>

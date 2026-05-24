@@ -476,6 +476,29 @@ html, body {
     color: var(--text-light);
 }
 
+/* Placeholders inside modals */
+.modal-overlay input::placeholder,
+.modal-overlay textarea::placeholder {
+    color: #b0b0b0 !important;
+    opacity: 1 !important;
+}
+
+.modal-overlay input::-webkit-input-placeholder,
+.modal-overlay textarea::-webkit-input-placeholder {
+    color: #b0b0b0 !important;
+}
+
+.modal-overlay input::-moz-placeholder,
+.modal-overlay textarea::-moz-placeholder {
+    color: #b0b0b0 !important;
+    opacity: 1 !important;
+}
+
+.modal-overlay input:-ms-input-placeholder,
+.modal-overlay textarea:-ms-input-placeholder {
+    color: #b0b0b0 !important;
+}
+
 .search-input:focus {
     outline: none;
     border-color: var(--bg-aside);
@@ -1267,20 +1290,12 @@ html, body {
 
     .data-table th,
     .data-table td {
-        padding: 8px 10px;
-        font-size: 0.8em;
-    }
-
-    .action-buttons {
-        gap: 8px;
-    }
-
-    .btn-icon {
-        width: 28px;
-        height: 28px;
-        font-size: 0.9em;
+        padding: 10px 12px;
+        font-size: 0.85em;
     }
 }
+
+
 
 /* ==========================================
    ESTILOS PARA FILAS CLICKEABLES Y TABLA DE ELEMENTOS
