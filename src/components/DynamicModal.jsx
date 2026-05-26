@@ -4,7 +4,7 @@ import { getModalConfig, validateForm, validateField } from '../utils/modalConfi
 /**
  * Componente de modal dinámico que cambia su contenido según el tipo
  */
-export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title }) {
+export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, fieldOptions = {}, initialData = {}, onFieldChange }) {
   const [formData, setFormData] = useState({})
   const [errors, setErrors] = useState({})
   const [focusedField, setFocusedField] = useState(null)
@@ -15,15 +15,16 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title }) {
   // Inicializar formData cuando cambia el tipo de modal
   useEffect(() => {
     if (isOpen && modalType) {
-      const initialData = {}
+      const init = {}
       config.fields.forEach((field) => {
-        initialData[field.name] = field.defaultValue || ''
+        init[field.name] = field.defaultValue || ''
       })
-      setFormData(initialData)
+      // merge provided initialData (from parent) on top of defaults
+      setFormData({ ...init, ...(initialData || {}) })
       setErrors({})
       setFocusedField(null)
     }
-  }, [isOpen, modalType])
+  }, [isOpen, modalType, initialData])
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -31,6 +32,7 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title }) {
       ...prev,
       [name]: value,
     }))
+    if (typeof onFieldChange === 'function') onFieldChange(name, value)
     // Limpiar error del campo cuando el usuario empieza a escribir
     if (errors[name]) {
       setErrors((prev) => ({
@@ -190,9 +192,9 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title }) {
                   }}
                 >
                   <option value="">Seleccionar {field.label}</option>
-                  {field.options.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
+                  {(fieldOptions[field.name] || field.options || []).map((option) => (
+                    <option key={option.value || option} value={option.value || option}>
+                      {option.label || option}
                     </option>
                   ))}
                 </select>

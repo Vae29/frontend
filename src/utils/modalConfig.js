@@ -142,10 +142,17 @@ export const getModalConfig = (type) => {
           required: true,
         },
         {
-          name: 'ubicacion',
-          label: 'Ubicación',
-          type: 'text',
-          placeholder: 'Ej: Granada, Meta',
+          name: 'departamento',
+          label: 'Departamento',
+          type: 'select',
+          options: [], // se proveerá desde DEPARTAMENTOS
+          required: true,
+        },
+        {
+          name: 'municipio',
+          label: 'Municipio / Ciudad',
+          type: 'select',
+          options: [], // se cargan dinámicamente según departamento seleccionado
           required: true,
         },
       ],
@@ -222,3 +229,42 @@ export const validateForm = (type, formData) => {
 export const resetForm = (type) => {
   return createInitialFormState(type)
 }
+
+// Lista de departamentos y municipios (centralizada para usar en modales)
+export const MUNICIPIOS_POR_DEPARTAMENTO = {
+  Amazonas: ['Leticia', 'Puerto Nariño'],
+  Antioquia: ['Medellín', 'Envigado', 'Bello', 'Itagüí', 'Rionegro', 'Turbo', 'Apartadó', 'Caucasia', 'Santa Fe de Antioquia', 'Marinilla'],
+  Arauca: ['Arauca', 'Arauquita', 'Saravena', 'Tame', 'Fortul'],
+  Atlántico: ['Barranquilla', 'Soledad', 'Malambo', 'Puerto Colombia', 'Sabanalarga', 'Baranoa'],
+  Bolívar: ['Cartagena', 'Magangué', 'Turbaco', 'El Carmen de Bolívar', 'Arjona', 'Mompox'],
+  Boyacá: ['Tunja', 'Duitama', 'Sogamoso', 'Chiquinquirá', 'Villa de Leyva', 'Paipa', 'Samacá'],
+  Caldas: ['Manizales', 'Chinchiná', 'La Dorada', 'Villamaría', 'Riosucio'],
+  Caquetá: ['Florencia', 'San Vicente del Caguán', 'Cartagena del Chairá', 'Belén de los Andaquíes'],
+  Casanare: ['Yopal', 'Aguazul', 'Villanueva', 'Paz de Ariporo', 'Tauramena'],
+  Cauca: ['Popayán', 'Santander de Quilichao', 'Puerto Tejada', 'Patía', 'Guapi'],
+  Cesar: ['Valledupar', 'Aguachica', 'Bosconia', 'Codazzi', 'Curumaní'],
+  Chocó: ['Quibdó', 'Istmina', 'Tadó', 'Condoto', 'Bahía Solano'],
+  Córdoba: ['Montería', 'Cereté', 'Lorica', 'Sahagún', 'Planeta Rica'],
+  Cundinamarca: ['Soacha', 'Zipaquirá', 'Chía', 'Facatativá', 'Girardot', 'Fusagasugá', 'Mosquera', 'Madrid', 'Cajicá'],
+  'Bogotá D.C.': ['Suba', 'Engativá', 'Kennedy', 'Chapinero', 'Usaquén', 'Bosa'],
+  Guainía: ['Inírida'],
+  Guaviare: ['San José del Guaviare', 'Calamar', 'El Retorno', 'Miraflores'],
+  Huila: ['Neiva', 'Pitalito', 'Garzón', 'La Plata', 'Campoalegre'],
+  'La Guajira': ['Riohacha', 'Maicao', 'Uribia', 'Fonseca', 'San Juan del Cesar'],
+  Magdalena: ['Santa Marta', 'Ciénaga', 'Fundación', 'Plato', 'El Banco'],
+  Meta: ['Villavicencio', 'Acacías', 'Granada', 'Puerto López', 'Restrepo'],
+  Nariño: ['Pasto', 'Ipiales', 'Tumaco', 'Túquerres', 'La Unión'],
+  'Norte de Santander': ['Cúcuta', 'Ocaña', 'Villa del Rosario', 'Pamplona', 'Tibú'],
+  Putumayo: ['Mocoa', 'Puerto Asís', 'Orito', 'Sibundoy', 'Valle del Guamuez'],
+  Quindío: ['Armenia', 'Calarcá', 'Montenegro', 'Quimbaya', 'Salento'],
+  Risaralda: ['Pereira', 'Dosquebradas', 'Santa Rosa de Cabal', 'La Virginia', 'Belén de Umbría'],
+  'San Andrés y Providencia': ['San Andrés', 'Providencia'],
+  Santander: ['Bucaramanga', 'Floridablanca', 'Girón', 'Piedecuesta', 'Barrancabermeja', 'San Gil'],
+  Sucre: ['Sincelejo', 'Corozal', 'Tolú', 'San Marcos', 'Sampués'],
+  Tolima: ['Ibagué', 'Espinal', 'Melgar', 'Honda', 'Chaparral'],
+  'Valle del Cauca': ['Alcalá', 'Andalucía', 'Ansermanuevo', 'Argelia', 'Bolívar', 'Buenaventura', 'Bugalagrande', 'Caicedonia', 'Calima El Darién', 'Candelaria', 'Cartago', 'Dagua', 'El Águila', 'El Cairo', 'El Cerrito', 'El Dovio', 'Florida', 'Ginebra', 'Guacarí', 'Guadalajara de Buga', 'Jamundí', 'La Cumbre', 'La Unión', 'La Victoria', 'Obando', 'Palmira', 'Pradera', 'Restrepo', 'Riofrío', 'Roldanillo', 'San Pedro', 'Sevilla', 'Toro', 'Trujillo', 'Tuluá', 'Ulloa', 'Versalles', 'Vijes', 'Yotoco', 'Yumbo', 'Zarzal'],
+  Vaupés: ['Mitú', 'Carurú', 'Taraira'],
+  Vichada: ['Puerto Carreño', 'La Primavera', 'Santa Rosalía', 'Cumaribo'],
+}
+
+export const DEPARTAMENTOS = Object.keys(MUNICIPIOS_POR_DEPARTAMENTO).map((d) => ({ value: d, label: d }))

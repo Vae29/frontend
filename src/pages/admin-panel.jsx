@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import * as Agro from '../services/agroData'
 import { clearSession, getSession } from '../services/authSession'
 import { getInventarioElementos } from '../utils/inventarioElementos'
-import { MODAL_TYPES } from '../utils/modalConfig'
+import { MODAL_TYPES, DEPARTAMENTOS, MUNICIPIOS_POR_DEPARTAMENTO } from '../utils/modalConfig'
+import { fetchFincas, createFinca, updateFinca, deleteFinca } from '../services/fincaService'
+import { fetchDashboardForFinca } from '../services/dashboardService'
 import Header from '../components/Header'
 import Sidebar from '../components/Sidebar'
 import DynamicModal from '../components/DynamicModal'
@@ -11,6 +13,7 @@ import { updateAdminDashboardCharts, updateRentabilidadCharts } from './admin/ad
 import { AdminReportTable } from './admin/AdminReportViews'
 import '../styles/dashboard.css'
 import '../styles/admin-panel.css'
+import Swal from 'sweetalert2'
 
 const SECTION_TITLES = {
   dashboard: 'Dashboard',
@@ -22,6 +25,8 @@ const SECTION_TITLES = {
   rentabilidad: 'Análisis de Rentabilidad',
   alertas: 'Centro de Alertas',
 }
+
+// DEPARTAMENTOS y MUNICIPIOS centralizados en modalConfig
 
 const ASIGNACIONES_BY_USUARIO = {
   2: [
@@ -113,8 +118,15 @@ export default function AdminPanel() {
   const [filtroCategoriaCosto, setFiltroCategoriaCosto] = useState('')
   const [filtroUsuario, setFiltroUsuario] = useState('')
   const [filtroEstadoCultivo, setFiltroEstadoCultivo] = useState('')
-  const [showModalAgregarFinca, setShowModalAgregarFinca] = useState(false)
-  const [formFinca, setFormFinca] = useState({ nombre: '', ubicacion: '' })
+  const [modalInitialData, setModalInitialData] = useState({})
+  const [modalFieldOptions, setModalFieldOptions] = useState({})
+  const [fincas, setFincas] = useState([])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [isLoadingFincas, setIsLoadingFincas] = useState(false)
+  const [dashboardData, setDashboardData] = useState(null)
+  const [isLoadingDashboard, setIsLoadingDashboard] = useState(false)
+  const [dashboardError, setDashboardError] = useState(null)
+  const [editingFinca, setEditingFinca] = useState(null)
   const [fincasRefresh, setFincasRefresh] = useState(0)
   const [showDynamicModal, setShowDynamicModal] = useState(false)
   const [dynamicModalType, setDynamicModalType] = useState(null)
@@ -149,32 +161,143 @@ export default function AdminPanel() {
     setToast({ message, type })
   }, [])
 
-  const handleAgregarFinca = (e) => {
-    e.preventDefault()
-    if (!formFinca.nombre.trim() || !formFinca.ubicacion.trim()) {
-      showNotification('Por favor, completa todos los campos', 'error')
-      return
-    }
-    Agro.agregarFinca(formFinca.nombre.trim(), formFinca.ubicacion.trim())
-    showNotification(`Finca "${formFinca.nombre}" agregada exitosamente`, 'success')
-    setFormFinca({ nombre: '', ubicacion: '' })
-    setShowModalAgregarFinca(false)
-    setFincasRefresh((prev) => prev + 1)
+  const fetchDashboardData = useCallback(
+    async (selectedFincaId) => {
+      if (!selectedFincaId) return
+      try {
+        setIsLoadingDashboard(true)
+        const data = await fetchDashboardForFinca(selectedFincaId)
+        setDashboardData(data)
+        setDashboardError(null)
+      } catch (error) {
+        console.error(error)
+        setDashboardData(null)
+        setDashboardError('No se pudo cargar el dashboard')
+      } finally {
+        setIsLoadingDashboard(false)
+      }
+    },
+    []
+  )
+
+  const fetchFincasList = useCallback(
+    async (search = '') => {
+      try {
+        setIsLoadingFincas(true)
+        const lista = await fetchFincas(search)
+        setFincas(lista)
+        if (!fincaId && lista.length > 0) {
+          setFincaId(String(lista[0].id))
+        }
+      } catch (error) {
+        console.error(error)
+        showNotification('No se pudo cargar la lista de fincas', 'error')
+      } finally {
+        setIsLoadingFincas(false)
+      }
+    },
+    [fincaId, showNotification]
+  )
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      fetchFincasList(searchTerm)
+    }, 300)
+    return () => window.clearTimeout(id)
+  }, [searchTerm, fetchFincasList, fincasRefresh])
+
+  useEffect(() => {
+    fetchDashboardData(fincaId)
+  }, [fincaId, fincasRefresh, fetchDashboardData])
+
+  const handleBuscarFincas = () => {
+    fetchFincasList(searchTerm)
   }
 
-  const handleCancelAgregarFinca = () => {
-    setFormFinca({ nombre: '', ubicacion: '' })
-    setShowModalAgregarFinca(false)
+  const handleOpenFincaModal = (finca = null) => {
+    // prepare modal options and initial data
+    const [editDepartamento, editMunicipio] = (() => {
+      if (!finca?.ubicacion) return ['', '']
+      const parts = finca.ubicacion.split(',')
+      const municipio = parts[0].trim()
+      const departamento = parts.slice(1).join(',').trim()
+      return [departamento, municipio]
+    })()
+
+    setEditingFinca(finca)
+    setModalFieldOptions({
+      departamento: DEPARTAMENTOS,
+      municipio: MUNICIPIOS_POR_DEPARTAMENTO[editDepartamento] ? MUNICIPIOS_POR_DEPARTAMENTO[editDepartamento].map((m) => ({ value: m, label: m })) : [],
+    })
+
+    setModalInitialData({
+      nombre: finca?.nombre || '',
+      departamento: editDepartamento || '',
+      municipio: editMunicipio || '',
+    })
+
+    setDynamicModalType(MODAL_TYPES.FINCA)
+    setShowDynamicModal(true)
+  }
+
+  const handleDeleteFinca = async (id) => {
+    const result = await Swal.fire({
+      title: 'AgroGestion',
+      text: '¿Seguro que deseas eliminar esta finca? Esta acción no se puede deshacer.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#dc3545',
+      cancelButtonColor: '#ffffff',
+      customClass: {
+      cancelButton: 'custom-cancel-btn',
+      confirmButton: 'custom-confirm-btn',
+      }
+    })
+
+    if (!result.isConfirmed) return
+
+    try {
+      await deleteFinca(id)
+      showNotification('Finca eliminada correctamente', 'success')
+      setFincasRefresh((prev) => prev + 1)
+    } catch (error) {
+      console.error(error)
+      const message = error?.response?.data?.error || 'Error eliminando la finca'
+      showNotification(message, 'error')
+    }
   }
 
   const handleOpenDynamicModal = (type) => {
     setDynamicModalType(type)
+    // preparar opciones dinámicas (ej. para modal USUARIO)
+    if (type === MODAL_TYPES.USUARIO) {
+      ;(async () => {
+        try {
+          const fincasResponse = await fetchFincas()
+          const fincasOptions = Array.isArray(fincasResponse)
+            ? fincasResponse.map((finca) => ({ value: finca.id, label: finca.nombre }))
+            : []
+
+          const cultivosOptions = (Agro.cultivos || [])
+            .filter((c) => c.estado !== 'finalizado')
+            .map((c) => ({ value: c.id, label: c.nombre }))
+
+          setModalFieldOptions({ fincas: fincasOptions, cultivos: cultivosOptions })
+        } catch (err) {
+          console.error(err)
+        }
+      })()
+    }
+
     setShowDynamicModal(true)
   }
 
   const handleCloseDynamicModal = () => {
     setShowDynamicModal(false)
     setDynamicModalType(null)
+    setModalFieldOptions({})
   }
 
   const handleSubmitDynamicModal = (formData) => {
@@ -192,6 +315,35 @@ export default function AdminPanel() {
       case MODAL_TYPES.COSTO:
         successMessage = `Costo de ${formData.categoria} agregado exitosamente`
         break
+      case MODAL_TYPES.FINCA: {
+        const nombre = formData.nombre?.trim()
+        const departamento = formData.departamento
+        const municipio = formData.municipio
+        if (!nombre || !departamento || !municipio) {
+          showNotification('Por favor completa todos los campos de la finca', 'error')
+          return
+        }
+        const ubicacion = `${municipio}, ${departamento}`
+        ;(async () => {
+          try {
+            if (editingFinca) {
+              await updateFinca(editingFinca.id, { nombre, ubicacion })
+              showNotification(`Finca "${nombre}" actualizada exitosamente`, 'success')
+            } else {
+              await createFinca({ nombre, ubicacion })
+              showNotification(`Finca "${nombre}" agregada exitosamente`, 'success')
+            }
+            setFincasRefresh((prev) => prev + 1)
+            setEditingFinca(null)
+          } catch (error) {
+            console.error(error)
+            const message = error?.response?.data?.error || 'Error guardando la finca'
+            showNotification(message, 'error')
+          }
+        })()
+        successMessage = editingFinca ? `Finca "${nombre}" actualizada exitosamente` : `Finca "${nombre}" agregada exitosamente`
+        break
+      }
       default:
         successMessage = 'Datos agregados exitosamente'
     }
@@ -200,10 +352,34 @@ export default function AdminPanel() {
     handleCloseDynamicModal()
   }
 
-  const resumen = Agro.computeFincaResumen(fincaId)
+  const resumen = dashboardData?.summary || {
+    costos: 0,
+    ingresos: 0,
+    ganancia: 0,
+    produccionKg: 0,
+    cultivosActivos: 0,
+    cultivosFinalizados: 0,
+  }
   const margin = resumen.ingresos > 0 ? (resumen.ganancia / resumen.ingresos) * 100 : 0
 
-  const cultivosEnFinca = Agro.cultivos.filter((c) => c.fincaId === fincaId)
+  const formatTrendChange = (trend = []) => {
+    if (!Array.isArray(trend) || trend.length < 2) return 'Sin datos históricos'
+    const previous = trend[trend.length - 2]?.value || 0
+    const current = trend[trend.length - 1]?.value || 0
+    if (previous === 0) {
+      return current === 0 ? 'Sin cambio reciente' : `Ultimo mes: +${Math.round(current)}%`
+    }
+    const diff = current - previous
+    const percent = Math.round((diff / previous) * 100)
+    const sign = diff >= 0 ? '+' : ''
+    return `${sign}${percent}% desde el mes pasado`
+  }
+
+  const costTrendText = formatTrendChange(dashboardData?.costTrend)
+  const productionTrendText = formatTrendChange(dashboardData?.productionTrend)
+  const ingresosSubtext = dashboardData?.productionTrend?.length > 1 ? productionTrendText : 'Basado en ingresos registrados'
+
+  const cultivosEnFinca = dashboardData?.cultivosEstado || []
   const detalleCultivo = selectedCultivoId ? Agro.getDetalleCultivo(selectedCultivoId) : null
   const cultivoSeleccionado = selectedCultivoId ? Agro.cultivos.find((c) => c.id === selectedCultivoId) : null
 
@@ -216,18 +392,12 @@ export default function AdminPanel() {
     return { total, count: detalleCultivo.costos.length }
   })()
 
-  const rentabilidadRows = cultivosEnFinca.map((c) => {
-    const ingresos = Agro.computeCultivoIngresos(c.id)
-    const costos = Agro.computeCultivoCostos(c.id)
-    const ganancia = ingresos - costos
-    const margen = ingresos > 0 ? (ganancia / ingresos) * 100 : 0
-    return { nombre: c.nombre, ingresos, costos, ganancia, margen }
-  })
+  const rentabilidadRows = dashboardData?.rentability || []
 
   useEffect(() => {
-    if (activeSection !== 'dashboard') return
+    if (activeSection !== 'dashboard' || !dashboardData) return
     const id = window.setTimeout(() => {
-      updateAdminDashboardCharts(Agro, fincaId, {
+      updateAdminDashboardCharts(dashboardData, {
         chartProduccion: cpRef,
         chartCostos: ccRef,
         chartCategoriaCostos: ccatRef,
@@ -235,24 +405,25 @@ export default function AdminPanel() {
       })
     }, 120)
     return () => window.clearTimeout(id)
-  }, [activeSection, fincaId])
+  }, [activeSection, dashboardData])
 
   useEffect(() => {
-    if (activeSection !== 'rentabilidad') return
+    if (activeSection !== 'rentabilidad' || !dashboardData) return
     const id = window.setTimeout(() => {
-      updateRentabilidadCharts(Agro, fincaId, {
+      updateRentabilidadCharts(dashboardData, {
         chartRentabilidadDetallada: crdRef,
         chartComparativaIngresosCostos: cicRef,
       })
     }, 120)
     return () => window.clearTimeout(id)
-  }, [activeSection, fincaId])
+  }, [activeSection, dashboardData])
 
   useEffect(() => {
     const handler = () => {
+      if (!dashboardData) return
       if (activeSection === 'dashboard') {
         window.setTimeout(() => {
-          updateAdminDashboardCharts(Agro, Agro.getSelectedFincaId(), {
+          updateAdminDashboardCharts(dashboardData, {
             chartProduccion: cpRef,
             chartCostos: ccRef,
             chartCategoriaCostos: ccatRef,
@@ -262,7 +433,7 @@ export default function AdminPanel() {
       }
       if (activeSection === 'rentabilidad') {
         window.setTimeout(() => {
-          updateRentabilidadCharts(Agro, Agro.getSelectedFincaId(), {
+          updateRentabilidadCharts(dashboardData, {
             chartRentabilidadDetallada: crdRef,
             chartComparativaIngresosCostos: cicRef,
           })
@@ -274,7 +445,7 @@ export default function AdminPanel() {
     }
     window.addEventListener('agro:fincaChanged', handler)
     return () => window.removeEventListener('agro:fincaChanged', handler)
-  }, [activeSection, reportVisible, reportType])
+  }, [activeSection, dashboardData, reportVisible, reportType])
 
   const switchSection = (sectionId) => {
     if (sectionId !== 'detalle-cultivo') {
@@ -288,15 +459,30 @@ export default function AdminPanel() {
   const onFincaChange = (id) => {
     Agro.setSelectedFincaId(id)
     setFincaId(id)
-    const fincaNombre = Agro.getFincaById(id)?.nombre || id
+    const fincaNombre = fincas.find((f) => String(f.id) === String(id))?.nombre || id
     showNotification(`Finca ${fincaNombre} seleccionada`)
   }
 
-  const onLogout = () => {
-    if (window.confirm('¿Estás seguro de que deseas cerrar sesión?')) {
-      clearSession()
-      navigate('/', { replace: true })
-    }
+  const onLogout = async () => {
+    const result = await Swal.fire({
+      title: 'AgroGestion',
+      text: '¿Estás seguro de que deseas cerrar sesión?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, cerrar sesión',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#dc3545',
+      cancelButtonColor: '#ffffff',
+      customClass: {
+        cancelButton: 'custom-cancel-btn',
+        confirmButton: 'custom-confirm-btn',
+      },
+    })
+
+    if (!result.isConfirmed) return
+
+    clearSession()
+    navigate('/', { replace: true })
   }
 
   const openCultivoDetalle = (cultivo) => {
@@ -373,30 +559,18 @@ export default function AdminPanel() {
     XLSX.writeFile(wb, `reporte-${reportType}.xlsx`)
   }
 
+  const recentActivities = dashboardData?.recentActivities || []
+  const alertItems = dashboardData?.alerts || []
+  const alertIcons = {
+    warning: '⚠️',
+    danger: '🚨',
+    info: 'ℹ️',
+    success: '✅',
+  }
+
   const cultivosEstadoCards = cultivosEnFinca.map((c) => {
-    const detalle = Agro.getDetalleCultivo(c.id)
-    const costos = (detalle.costos || []).reduce((a, x) => a + Agro.parseMoney(x.valor), 0)
-    const produccion = (detalle.cosechas || []).reduce((a, x) => a + (Number(x.cantidad) || 0), 0)
-    const ingresos = Agro.computeCultivoIngresos(c.id)
-    const ganancia = ingresos - Agro.computeCultivoCostos(c.id)
-    const badgeClass = c.estado === 'finalizado' ? 'completed' : 'active'
-    const badgeText = c.estado === 'finalizado' ? 'Finalizado' : 'Activo'
-    const extraLine =
-      c.estado === 'finalizado' ? (
-        <p>
-          <strong>Ganancia:</strong> {Agro.formatCOP(ganancia)}
-        </p>
-      ) : (
-        <p>
-          <strong>Producción:</strong> {produccion.toLocaleString('es-CO')} kg
-        </p>
-      )
-    const fechaFinLine =
-      c.fechaCosecha && c.fechaCosecha !== '--' ? (
-        <p>
-          <strong>Fin:</strong> {c.fechaCosecha}
-        </p>
-      ) : null
+    const badgeClass = c.estado?.toLowerCase() === 'finalizado' ? 'completed' : 'active'
+    const badgeText = badgeClass === 'completed' ? 'Finalizado' : 'Activo'
     return (
       <div key={c.id} className="cultivo-card">
         <div className="cultivo-header">
@@ -407,10 +581,14 @@ export default function AdminPanel() {
           <p>
             <strong>Inicio:</strong> {c.fechaInicio || '--'}
           </p>
-          {fechaFinLine}
-          {extraLine}
           <p>
-            <strong>Costo:</strong> {Agro.formatCOP(costos)}
+            <strong>Fin:</strong> {c.fechaFinal || '--'}
+          </p>
+          <p>
+            <strong>Ganancia:</strong> {Agro.formatCOP(c.ganancia)}
+          </p>
+          <p>
+            <strong>Costo:</strong> {Agro.formatCOP(c.costo)}
           </p>
         </div>
       </div>
@@ -424,6 +602,19 @@ export default function AdminPanel() {
         modalType={dynamicModalType}
         onClose={handleCloseDynamicModal}
         onSubmit={handleSubmitDynamicModal}
+        fieldOptions={modalFieldOptions}
+        initialData={modalInitialData}
+        onFieldChange={(name, value) => {
+          if (name === 'departamento') {
+            const municipios = value ? (MUNICIPIOS_POR_DEPARTAMENTO[value] || []) : []
+            setModalFieldOptions((prev) => ({
+              ...prev,
+              municipio: municipios.map((m) => ({ value: m, label: m })),
+            }))
+            // clear selected municipio in initial data when departamento changes
+            setModalInitialData((prev) => ({ ...prev, municipio: '' }))
+          }
+        }}
       />
 
       {toast ? (
@@ -446,142 +637,9 @@ export default function AdminPanel() {
         </div>
       ) : null}
 
-      {showModalAgregarFinca && (
-        <div
-          className="modal-overlay"
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 999,
-          }}
-          onClick={handleCancelAgregarFinca}
-        >
-          <div
-            className="modal-content"
-            style={{
-              backgroundColor: 'white',
-              borderRadius: '12px',
-              padding: '40px',
-              maxWidth: '500px',
-              width: '90%',
-              boxShadow: '0 10px 40px rgba(0, 0, 0, 0.2)',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 style={{ marginBottom: '30px', color: 'var(--color-verde-oscuro)', fontFamily: "var(--font-titulo, 'Playfair Display')" }}>
-              Agregar Nueva Finca
-            </h2>
-            <form onSubmit={handleAgregarFinca}>
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: 'var(--color-verde-oscuro)' }}>
-                  Nombre de la Finca
-                </label>
-                <input
-                  type="text"
-                  value={formFinca.nombre}
-                  onChange={(e) => setFormFinca({ ...formFinca, nombre: e.target.value })}
-                  placeholder="Ej: Finca El Bosque"
-                  style={{
-                    width: '100%',
-                    padding: '12px 16px',
-                    border: '2px solid #e8e8e8',
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    fontFamily: "var(--font-cuerpo, 'Poppins')",
-                    boxSizing: 'border-box',
-                    transition: 'all 0.3s ease',
-                  }}
-                  onFocus={(e) => (e.target.style.borderColor = 'var(--color-verde-oscuro)')}
-                  onBlur={(e) => (e.target.style.borderColor = '#e8e8e8')}
-                />
-              </div>
-              <div style={{ marginBottom: '30px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: 'var(--color-verde-oscuro)' }}>
-                  Ubicación
-                </label>
-                <input
-                  type="text"
-                  value={formFinca.ubicacion}
-                  onChange={(e) => setFormFinca({ ...formFinca, ubicacion: e.target.value })}
-                  placeholder="Ej: Granada, Meta"
-                  style={{
-                    width: '100%',
-                    padding: '12px 16px',
-                    border: '2px solid #e8e8e8',
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    fontFamily: "var(--font-cuerpo, 'Poppins')",
-                    boxSizing: 'border-box',
-                    transition: 'all 0.3s ease',
-                  }}
-                  onFocus={(e) => (e.target.style.borderColor = 'var(--color-verde-oscuro)')}
-                  onBlur={(e) => (e.target.style.borderColor = '#e8e8e8')}
-                />
-              </div>
-              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                <button
-                  type="button"
-                  onClick={handleCancelAgregarFinca}
-                  style={{
-                    padding: '10px 24px',
-                    border: '2px solid #ddd',
-                    borderRadius: '8px',
-                    backgroundColor: '#f5f5f5',
-                    color: '#333',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontFamily: "var(--font-cuerpo, 'Poppins')",
-                    transition: 'all 0.3s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.target.style.backgroundColor = '#e0e0e0'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.target.style.backgroundColor = '#f5f5f5'
-                  }}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  style={{
-                    padding: '10px 24px',
-                    border: 'none',
-                    borderRadius: '8px',
-                    backgroundColor: 'var(--color-verde-oscuro)',
-                    color: 'white',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontFamily: "var(--font-cuerpo, 'Poppins')",
-                    transition: 'all 0.3s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.target.style.backgroundColor = '#3d5231'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.target.style.backgroundColor = 'var(--color-verde-oscuro)'
-                  }}
-                >
-                  Agregar Finca
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       <Sidebar
         roleSubtitle="Rol: Administrador"
-        fincaOptions={Agro.fincas}
+        fincaOptions={fincas.length > 0 ? fincas : Agro.fincas}
         fincaValue={fincaId}
         onFincaChange={onFincaChange}
         navItems={navItems}
@@ -601,6 +659,16 @@ export default function AdminPanel() {
 
         <div className="content-container">
           <section id="dashboard-section" className={`content-section ${activeSection === 'dashboard' ? 'active' : ''}`}>
+            {dashboardError ? (
+              <div className="dashboard-error" style={{ marginBottom: 16, color: '#c0392b' }}>
+                {dashboardError}
+              </div>
+            ) : null}
+            {isLoadingDashboard ? (
+              <div className="dashboard-loading" style={{ marginBottom: 16, color: '#34495e' }}>
+                Cargando información del dashboard...
+              </div>
+            ) : null}
             <div className="kpi-container">
               <div className="kpi-card">
                 <div className="kpi-header">
@@ -610,7 +678,7 @@ export default function AdminPanel() {
                 <div className="kpi-value" id="kpiCostoTotal">
                   {Agro.formatCOP(resumen.costos)}
                 </div>
-                <div className="kpi-subtext">+2.5% desde el mes pasado</div>
+                <div className="kpi-subtext">{costTrendText}</div>
               </div>
               <div className="kpi-card">
                 <div className="kpi-header">
@@ -620,7 +688,7 @@ export default function AdminPanel() {
                 <div className="kpi-value" id="kpiIngresosTotales">
                   {Agro.formatCOP(resumen.ingresos)}
                 </div>
-                <div className="kpi-subtext">+15.2% desde el mes pasado</div>
+                <div className="kpi-subtext">{ingresosSubtext}</div>
               </div>
               <div className="kpi-card">
                 <div className="kpi-header">
@@ -707,80 +775,45 @@ export default function AdminPanel() {
             <div className="timeline-section">
               <h2>Actividades Recientes</h2>
               <div className="timeline">
-                <div className="timeline-item">
-                  <div className="timeline-dot" />
-                  <div className="timeline-content">
-                    <h4>Cosecha finalizada: Tomate Cherry</h4>
-                    <p>Se cosecharon 85 kg. Ingreso: $1,275</p>
-                    <time>Hace 2 horas</time>
-                  </div>
-                </div>
-                <div className="timeline-item">
-                  <div className="timeline-dot" />
-                  <div className="timeline-content">
-                    <h4>Costo registrado: Fertilizante</h4>
-                    <p>Categoría: Insumos | Cantidad: $850</p>
-                    <time>Hace 4 horas</time>
-                  </div>
-                </div>
-                <div className="timeline-item">
-                  <div className="timeline-dot" />
-                  <div className="timeline-content">
-                    <h4>Etapa iniciada: Lechuga en cosecha</h4>
-                    <p>Cultivo: Lechuga Iceberg</p>
-                    <time>Hace 1 día</time>
-                  </div>
-                </div>
-                <div className="timeline-item">
-                  <div className="timeline-dot" />
-                  <div className="timeline-content">
-                    <h4>Costo registrado: Mano de obra</h4>
-                    <p>Categoría: Personal | Cantidad: $2,500</p>
-                    <time>Hace 2 días</time>
-                  </div>
-                </div>
-                <div className="timeline-item">
-                  <div className="timeline-dot" />
-                  <div className="timeline-content">
-                    <h4>Cultivo iniciado: Pepino</h4>
-                    <p>Etapa: Siembra</p>
-                    <time>Hace 3 días</time>
-                  </div>
-                </div>
+                {recentActivities.length > 0 ? (
+                  recentActivities.map((activity, index) => (
+                    <div key={`${activity.type}-${activity.occurredAt}-${index}`} className="timeline-item">
+                      <div className="timeline-dot" />
+                      <div className="timeline-content">
+                        <h4>{activity.title}</h4>
+                        <p>{activity.description}</p>
+                        <time>{activity.occurredAt}</time>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p style={{ padding: 10, color: 'var(--text-light)' }}>No hay actividades recientes para la finca seleccionada.</p>
+                )}
               </div>
             </div>
 
             <div className="alerts-section">
               <h2>Alertas y Advertencias</h2>
               <div className="alerts-grid">
-                <div className="alert-card alert-warning">
-                  <span className="alert-icon">⚠️</span>
-                  <div className="alert-content">
-                    <h4>Cultivo próximo a finalizar</h4>
-                    <p>Tomate Cherry finalizará en 8 días. Prepare recursos para cosecha.</p>
+                {alertItems.length > 0 ? (
+                  alertItems.map((alert, index) => (
+                    <div key={`${alert.type}-${index}`} className={`alert-card alert-${alert.type}`}>
+                      <span className="alert-icon">{alertIcons[alert.type] || 'ℹ️'}</span>
+                      <div className="alert-content">
+                        <h4>{alert.title}</h4>
+                        <p>{alert.message}</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="alert-card alert-info">
+                    <span className="alert-icon">ℹ️</span>
+                    <div className="alert-content">
+                      <h4>Sin alertas por el momento</h4>
+                      <p>La finca no reporta eventos críticos ni advertencias recientes.</p>
+                    </div>
                   </div>
-                </div>
-                <div className="alert-card alert-danger">
-                  <span className="alert-icon">🚨</span>
-                  <div className="alert-content">
-                    <h4>Costos elevados detectados</h4>
-                    <p>Pimentón Rojo presenta costos 25% superiores a lo presupuestado.</p>
-                  </div>
-                </div>
-                <div className="alert-card alert-info">
-                  <span className="alert-icon">ℹ️</span>
-                  <div className="alert-content">
-                    <h4>Baja producción</h4>
-                    <p>Pepino está con producción 15% por debajo de la proyectada.</p>
-                  </div>
-                </div>
-                <div className="alert-card alert-success">
-                  <span className="alert-icon">✅</span>
-                  <div className="alert-content">
-                    <h4>Rentabilidad óptima</h4>
-                    <p>Lechuga Iceberg alcanzó 45% de rentabilidad. Considere replicar modelo.</p>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           </section>
@@ -788,12 +821,18 @@ export default function AdminPanel() {
           <section id="fincas-section" className={`content-section ${activeSection === 'fincas' ? 'active' : ''}`}>
             <div className="section-header">
               <div className="search-wrapper">
-                <input type="text" className="search-input" placeholder="🔍 Buscar por nombre..." readOnly />
-                <button type="button" className="btn-search">
+                <input
+                  type="text"
+                  className="search-input"
+                  placeholder="🔍 Buscar por nombre..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                <button type="button" className="btn-search" onClick={handleBuscarFincas}>
                   Buscar
                 </button>
               </div>
-              <button type="button" className="btn-add btn-primary" onClick={() => setShowModalAgregarFinca(true)}>
+              <button type="button" className="btn-add btn-primary" onClick={() => handleOpenFincaModal()}>
                 + Agregar Nueva Finca
               </button>
             </div>
@@ -811,28 +850,52 @@ export default function AdminPanel() {
                   </tr>
                 </thead>
                 <tbody>
-                  {Agro.fincas.map((finca) => {
-                    const cultivosActivos = Agro.cultivos.filter(
-                      (c) => c.fincaId === finca.id && c.estado !== 'finalizado' && c.estado !== 'perdido'
-                    ).length
-                    return (
-                      <tr key={finca.id} className="data-item">
-                        <td data-field="nombre">{finca.nombre}</td>
-                        <td data-field="ubicacion">{finca.ubicacion || '--'}</td>
-                        <td data-field="cultivos">{cultivosActivos}</td>
-                        <td data-field="acciones">
-                          <div className="action-buttons">
-                            <button type="button" className="btn-icon btn-edit" title="Editar">
-                              ✏️
-                            </button>
-                            <button type="button" className="btn-icon btn-delete" title="Eliminar">
-                              🗑️
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
+                  {isLoadingFincas ? (
+                    <tr>
+                      <td colSpan={4} style={{ textAlign: 'center', padding: '20px' }}>
+                        Cargando fincas...
+                      </td>
+                    </tr>
+                  ) : fincas.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} style={{ textAlign: 'center', padding: '20px' }}>
+                        No hay fincas registradas.
+                      </td>
+                    </tr>
+                  ) : (
+                    fincas.map((finca) => {
+                      const cultivosActivos = Agro.cultivos.filter(
+                        (c) => String(c.fincaId) === String(finca.id) && c.estado !== 'finalizado' && c.estado !== 'perdido'
+                      ).length
+                      return (
+                        <tr key={finca.id} className="data-item">
+                          <td data-field="nombre">{finca.nombre}</td>
+                          <td data-field="ubicacion">{finca.ubicacion || '--'}</td>
+                          <td data-field="cultivos">{cultivosActivos}</td>
+                          <td data-field="acciones">
+                            <div className="action-buttons">
+                              <button
+                                type="button"
+                                className="btn-icon btn-edit"
+                                title="Editar"
+                                onClick={() => handleOpenFincaModal(finca)}
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-icon btn-delete"
+                                title="Eliminar"
+                                onClick={() => handleDeleteFinca(finca.id)}
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
