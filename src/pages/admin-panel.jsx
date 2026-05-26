@@ -4,6 +4,7 @@ import * as Agro from '../services/agroData'
 import { clearSession, getSession } from '../services/authSession'
 import { getInventarioElementos } from '../utils/inventarioElementos'
 import { MODAL_TYPES, DEPARTAMENTOS, MUNICIPIOS_POR_DEPARTAMENTO } from '../utils/modalConfig'
+import { fetchUsers, createUser, updateUser, deleteUser } from '../services/authApi'
 import { fetchFincas, createFinca, updateFinca, deleteFinca } from '../services/fincaService'
 import { fetchDashboardForFinca } from '../services/dashboardService'
 import Header from '../components/Header'
@@ -130,6 +131,9 @@ export default function AdminPanel() {
   const [fincasRefresh, setFincasRefresh] = useState(0)
   const [showDynamicModal, setShowDynamicModal] = useState(false)
   const [dynamicModalType, setDynamicModalType] = useState(null)
+  // Usuario seleccionado y lista de usuarios (valery integration)
+  const [editingUser, setEditingUser] = useState(null)
+  const [users, setUsers] = useState([])
 
   const reportRef = useRef(null)
   const cpRef = useRef(null)
@@ -156,6 +160,29 @@ export default function AdminPanel() {
     const t = setTimeout(() => setToast(null), 3000)
     return () => clearTimeout(t)
   }, [toast])
+
+  // Carga la lista de usuarios desde el backend al iniciar el componente.
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const response = await fetchUsers()
+        if (response.success) {
+          const usersWithNormalizedAssignments = response.data.map((user) => ({
+            ...user,
+            fincas: Array.isArray(user.fincas) ? user.fincas.map(Number).filter(Boolean) : [],
+            cultivos: Array.isArray(user.cultivos) ? user.cultivos.map(Number).filter(Boolean) : [],
+          }))
+          setUsers(usersWithNormalizedAssignments)
+        } else {
+          console.error('Error al cargar usuarios:', response.message)
+        }
+      } catch (error) {
+        console.error('Error en loadUsers:', error)
+      }
+    }
+
+    loadUsers()
+  }, [])
 
   const showNotification = useCallback((message, type = 'info') => {
     setToast({ message, type })
