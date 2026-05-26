@@ -1,40 +1,117 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getTrabajadorByEmail } from '../services/agroData'
+import { loginUser, requestPasswordReset, verifyResetCode } from '../services/authApi'
 import { setSession } from '../services/authSession'
 import '../styles/login.css'
-
-const ADMIN_EMAIL = 'admin123@gmail.com'
 
 export default function Login() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [showResetModal, setShowResetModal] = useState(false)
+  const [resetEmail, setResetEmail] = useState('')
+  const [resetError, setResetError] = useState('')
+  const [resetSuccess, setResetSuccess] = useState('')
+  const [resetStep, setResetStep] = useState('email')
+  const [enteredCode, setEnteredCode] = useState('')
+  const [codeSentAt, setCodeSentAt] = useState(null)
+  const [isSendingCode, setIsSendingCode] = useState(false)
+  const [codeValidMessage, setCodeValidMessage] = useState('')
+  const [recoveredPassword, setRecoveredPassword] = useState('')
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    const em = email.trim().toLowerCase()
+    setIsLoading(true)
 
     if (!password) {
       window.alert('Ingrese la contraseña.')
+      setIsLoading(false)
       return
     }
 
-    if (em === ADMIN_EMAIL.toLowerCase()) {
-      setSession({ role: 'admin', email: em })
-      navigate('/admin', { replace: true })
+    const result = await loginUser(email, password)
+
+    if (result.success) {
+      const { id, email: userEmail, nombre, role } = result.data
+      setSession({ id, email: userEmail, nombre, role })
+      navigate(role === 'admin' ? '/admin' : '/worker', { replace: true })
+    } else {
+      window.alert(result.message || 'Credenciales no válidas. Intente nuevamente.')
+    }
+
+    setIsLoading(false)
+  }
+
+  const handleOpenResetModal = (e) => {
+    e.preventDefault()
+    setShowResetModal(true)
+    setResetEmail('')
+    setResetError('')
+    setResetSuccess('')
+    setResetStep('email')
+    setEnteredCode('')
+    setCodeSentAt(null)
+    setCodeValidMessage('')
+  }
+
+  const handleCloseResetModal = () => {
+    setShowResetModal(false)
+    setResetError('')
+    setResetSuccess('')
+    setCodeValidMessage('')
+  }
+
+  const handleSendResetCode = async () => {
+    setResetError('')
+    setResetSuccess('')
+    setCodeValidMessage('')
+
+    if (!resetEmail.trim()) {
+      setResetError('Por favor ingresa tu correo electrónico.')
       return
     }
 
-    const worker = getTrabajadorByEmail(em)
-    if (worker) {
-      setSession({ role: 'worker', email: em, workerKey: worker.key, workerId: worker.id })
-      navigate('/worker', { replace: true })
+    setIsSendingCode(true)
+    const result = await requestPasswordReset(resetEmail.trim().toLowerCase())
+    setIsSendingCode(false)
+
+    if (!result.success) {
+      setResetError(result.message)
       return
     }
 
-    window.alert('Credenciales no reconocidas. Use el correo de administrador o el de un trabajador registrado.')
+    setCodeSentAt(Date.now())
+    setResetStep('code')
+    setResetSuccess('Te enviamos un código de recuperación a tu correo. Revísalo e ingrésalo a continuación.')
+  }
+
+  const handleVerifyCode = async () => {
+    setResetError('')
+    setCodeValidMessage('')
+    setRecoveredPassword('')
+
+    if (!enteredCode.trim()) {
+      setResetError('Por favor ingresa el código de 4 dígitos.')
+      return
+    }
+
+    const elapsed = Date.now() - (codeSentAt || 0)
+    if (elapsed > 5 * 60 * 1000) {
+      setResetError('El código ha vencido. Solicita uno nuevo.')
+      return
+    }
+
+    const response = await verifyResetCode(resetEmail.trim().toLowerCase(), enteredCode.trim())
+    if (!response.success) {
+      setResetError(response.message)
+      return
+    }
+
+    setRecoveredPassword(response.data.password)
+    setResetStep('revealed')
+    setCodeValidMessage('Código correcto. Aquí está tu contraseña actual:')
   }
 
   return (
@@ -128,14 +205,192 @@ export default function Login() {
               </div>
             </div>
 
-            <button type="submit" className="login-btn">
-              Iniciar sesión
+            <button type="submit" className="login-btn" disabled={isLoading}>
+              {isLoading ? 'Autenticando...' : 'Iniciar sesión'}
             </button>
           </form>
 
-          <a href="#" className="forgot-password" onClick={(e) => e.preventDefault()}>
+          <a href="#" className="forgot-password" onClick={handleOpenResetModal}>
             ¿Olvidaste tu contraseña?
           </a>
+
+          {showResetModal && (
+            <div
+              className="modal-overlay"
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 999,
+              }}
+              onClick={handleCloseResetModal}
+            >
+              <div
+                className="modal-content"
+                style={{
+                  backgroundColor: 'white',
+                  borderRadius: '12px',
+                  padding: '32px',
+                  width: '100%',
+                  maxWidth: '420px',
+                  boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
+                  position: 'relative',
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  onClick={handleCloseResetModal}
+                  style={{
+                    position: 'absolute',
+                    top: '16px',
+                    right: '16px',
+                    border: 'none',
+                    background: 'transparent',
+                    fontSize: '18px',
+                    cursor: 'pointer',
+                  }}
+                  aria-label="Cerrar"
+                >
+                  ✕
+                </button>
+                <h3 style={{ marginTop: 0, color: '#2f4f28' }}>Recuperar contraseña</h3>
+                <p style={{ marginBottom: '24px', lineHeight: '1.5' }}>
+                  Ingresa tu correo electrónico y te enviaremos un código de 4 dígitos. El código tiene un límite de 5 minutos.
+                </p>
+
+                {resetStep === 'email' && (
+                  <>
+                    <div style={{ marginBottom: '16px' }}>
+                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }} htmlFor="resetEmail">
+                        Correo electrónico
+                      </label>
+                      <input
+                        id="resetEmail"
+                        type="text"
+                        value={resetEmail}
+                        onChange={(e) => setResetEmail(e.target.value)}
+                        placeholder="Correo registrado"
+                        style={{
+                          width: '100%',
+                          padding: '14px 18px',
+                          borderRadius: '12px',
+                          border: '2px solid #d9d9d9',
+                          fontSize: '14px',
+                          fontFamily: "var(--font-cuerpo, 'Poppins')",
+                          boxSizing: 'border-box',
+                          transition: 'all 0.3s ease',
+                          backgroundColor: '#fafafa',
+                          color: '#333',
+                          outline: 'none',
+                        }}
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleSendResetCode}
+                      disabled={isSendingCode}
+                      style={{
+                        width: '100%',
+                        padding: '12px 14px',
+                        borderRadius: '8px',
+                        border: 'none',
+                        backgroundColor: '#2f4f28',
+                        color: 'white',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        marginBottom: '20px',
+                      }}
+                    >
+                      {isSendingCode ? 'Enviando...' : 'Enviar contraseña'}
+                    </button>
+                  </>
+                )}
+
+                {resetStep === 'code' && (
+                  <div style={{ marginBottom: '20px' }}>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }} htmlFor="resetCode">
+                      Código de 4 dígitos
+                    </label>
+                    <input
+                      id="resetCode"
+                      type="text"
+                      value={enteredCode}
+                      onChange={(e) => setEnteredCode(e.target.value)}
+                      placeholder="Ingresa el código"
+                      maxLength={4}
+                      style={{
+                        width: '100%',
+                        padding: '12px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid #ccc',
+                        fontSize: '14px',
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleVerifyCode}
+                      style={{
+                        width: '100%',
+                        padding: '12px 14px',
+                        borderRadius: '8px',
+                        border: 'none',
+                        backgroundColor: '#2f4f28',
+                        color: 'white',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        marginTop: '12px',
+                      }}
+                    >
+                      Verificar código
+                    </button>
+                    <p style={{ marginTop: '12px', fontSize: '13px', color: '#555' }}>
+                      El código caduca 5 minutos después de ser enviado.
+                    </p>
+                  </div>
+                )}
+
+                {resetStep === 'revealed' && (
+                  <div style={{ marginBottom: '20px' }}>
+                    <p style={{ marginBottom: '12px', color: '#2f4f28', fontWeight: 600 }}>
+                      Contraseña actual encontrada:
+                    </p>
+                    <div
+                      style={{
+                        width: '100%',
+                        padding: '14px',
+                        borderRadius: '8px',
+                        backgroundColor: '#f4f9f0',
+                        border: '1px solid #c8dfc2',
+                        color: '#1d3b1c',
+                        fontSize: '15px',
+                        wordBreak: 'break-all',
+                      }}
+                    >
+                      {recoveredPassword}
+                    </div>
+                  </div>
+                )}
+
+                {resetError && (
+                  <p style={{ color: '#e74c3c', marginBottom: '12px' }}>{resetError}</p>
+                )}
+                {resetSuccess && (
+                  <p style={{ color: '#2f4f28', marginBottom: '12px' }}>{resetSuccess}</p>
+                )}
+                {codeValidMessage && (
+                  <p style={{ color: '#2f4f28', marginBottom: '12px' }}>{codeValidMessage}</p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
