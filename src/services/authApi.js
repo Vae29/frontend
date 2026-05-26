@@ -10,12 +10,26 @@ export async function loginUser(email, password) {
       body: JSON.stringify({ email, password }),
     });
 
-    const data = await response.json();
+    const text = await response.text();
+    let data = null;
+
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = null;
+    }
 
     if (!response.ok) {
       return {
         success: false,
-        message: data.message || 'Error en la autenticación',
+        message: (data && data.message) || 'Email o contraseña incorrectos',
+      };
+    }
+
+    if (!data || !data.data) {
+      return {
+        success: false,
+        message: 'Respuesta inválida del servidor',
       };
     }
 

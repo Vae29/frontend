@@ -84,15 +84,10 @@ export default function AdminPanel() {
   // Estado local del componente administrado por React.
   // fincaId guarda la finca seleccionada actualmente.
   const [fincaId, setFincaId] = useState(() => Agro.getSelectedFincaId())
-  const [activeSection, setActiveSection] = useState(() => {
-    const s = localStorage.getItem('activeSection') || 'dashboard'
-    if (s === 'detalle-cultivo') return 'cultivos'
-    return s
-  })
+  const [activeSection, setActiveSection] = useState('dashboard')
   // Título que se muestra en la cabecera según la sección activa.
   const [pageTitle, setPageTitle] = useState(() => {
-    const s = localStorage.getItem('activeSection') || 'dashboard'
-    const normalized = s === 'detalle-cultivo' ? 'cultivos' : s
+    const normalized = 'dashboard'
     return SECTION_TITLES[normalized] || 'Dashboard'
   })
   const [selectedCultivoId, setSelectedCultivoId] = useState(null)
@@ -539,14 +534,13 @@ export default function AdminPanel() {
     return () => window.removeEventListener('agro:fincaChanged', handler)
   }, [activeSection, reportVisible, reportType])
 
-  // Cambia la sección activa del panel y guarda la selección en localStorage.
+  // Cambia la sección activa del panel.
   const switchSection = (sectionId) => {
     if (sectionId !== 'detalle-cultivo') {
       setSelectedCultivoId(null)
     }
     setActiveSection(sectionId)
     setPageTitle(SECTION_TITLES[sectionId] || 'Dashboard')
-    localStorage.setItem('activeSection', sectionId)
   }
 
   // Cambia la finca seleccionada y notifica al usuario.
@@ -570,7 +564,6 @@ export default function AdminPanel() {
     setSelectedCultivoId(cultivo.id)
     setActiveSection('detalle-cultivo')
     setPageTitle(`Cultivo de ${cultivo.nombre}`)
-    localStorage.setItem('activeSection', 'detalle-cultivo')
     setElementosCultivo({ open: false, rows: [] })
   }
 

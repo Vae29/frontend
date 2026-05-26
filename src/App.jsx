@@ -4,9 +4,24 @@ import Login from './pages/login'
 import AdminPanel from './pages/admin-panel'
 import WorkerPanel from './pages/worker-panel'
 
+function normalizeRole(role) {
+  const value = String(role || '')
+    .trim()
+    .toLowerCase()
+    .replace(/á/g, 'a')
+    .replace(/é/g, 'e')
+    .replace(/í/g, 'i')
+    .replace(/ó/g, 'o')
+    .replace(/ú/g, 'u')
+
+  if (value === 'admin' || value === 'administrador' || value === '1') return 'admin'
+  if (value === 'worker' || value === 'trabajador' || value === '2') return 'worker'
+  return ''
+}
+
 function RequireAdmin({ children }) {
   const s = getSession()
-  if (!s || s.role !== 'admin') {
+  if (!s || normalizeRole(s.role) !== 'admin') {
     return <Navigate to="/" replace />
   }
   return children
@@ -14,7 +29,7 @@ function RequireAdmin({ children }) {
 
 function RequireWorker({ children }) {
   const s = getSession()
-  if (!s || s.role !== 'worker') {
+  if (!s || normalizeRole(s.role) !== 'worker') {
     return <Navigate to="/" replace />
   }
   return children

@@ -38,15 +38,22 @@ export default function WorkerPanel() {
   const session = getSession()
 
   const worker = useMemo(() => {
-    if (!session?.workerKey) return null
-    return Agro.getTrabajadorByKey(session.workerKey)
-  }, [session?.workerKey])
+    if (!session || session.role !== 'worker') return null
 
-  const [activeSection, setActiveSection] = useState(() => {
-    const saved = localStorage.getItem('activeSection')
-    if (saved === 'detalle-cultivo') return 'cultivos'
-    return saved || 'inicio'
-  })
+    if (session.workerKey) {
+      const foundByKey = Agro.getTrabajadorByKey(session.workerKey)
+      if (foundByKey) return foundByKey
+    }
+
+    if (session.email) {
+      const foundByEmail = Agro.getTrabajadorByEmail(session.email)
+      if (foundByEmail) return foundByEmail
+    }
+
+    return { id: session.id, nombre: session.nombre, email: session.email }
+  }, [session])
+
+  const [activeSection, setActiveSection] = useState('inicio')
   const [fincaId, setFincaId] = useState('')
   const [pageTitle, setPageTitle] = useState('Inicio - Mi panel')
   const [selectedCultivo, setSelectedCultivo] = useState(null)
@@ -62,10 +69,10 @@ export default function WorkerPanel() {
   const fincasAsignadas = useMemo(() => (worker ? Agro.getTrabajadorFincas(worker.id) : []), [worker])
 
   useEffect(() => {
-    if (!session || session.role !== 'worker' || !worker) {
+    if (!session || session.role !== 'worker') {
       navigate('/', { replace: true })
     }
-  }, [session, worker, navigate])
+  }, [session, navigate])
 
   const validFincaId = useMemo(() => {
     if (!worker || fincasAsignadas.length === 0) return ''
@@ -149,7 +156,6 @@ export default function WorkerPanel() {
       if (SECTION_TITLES[sectionId]) {
         setPageTitle(SECTION_TITLES[sectionId] === 'Inicio' ? 'Inicio - Mi panel' : SECTION_TITLES[sectionId])
       }
-      localStorage.setItem('activeSection', sectionId)
     },
     [],
   )
@@ -162,7 +168,6 @@ export default function WorkerPanel() {
     setFilterHasta('')
     setActiveSection('detalle-cultivo')
     setPageTitle(`Cultivo de ${cultivo.nombre}`)
-    localStorage.setItem('activeSection', 'detalle-cultivo')
     setElementosOpen(false)
   }
 

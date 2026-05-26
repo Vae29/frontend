@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import * as Agro from '../services/agroData'
 import { loginUser, requestPasswordReset, verifyResetCode } from '../services/authApi'
 import { setSession } from '../services/authSession'
 import '../styles/login.css'
@@ -25,17 +26,49 @@ export default function Login() {
     e.preventDefault()
     setIsLoading(true)
 
-    if (!password) {
+    const trimmedEmail = email.trim()
+    const trimmedPassword = password.trim()
+
+    if (!trimmedEmail) {
+      window.alert('Ingrese el correo electrónico.')
+      setIsLoading(false)
+      return
+    }
+
+    if (!trimmedPassword) {
       window.alert('Ingrese la contraseña.')
       setIsLoading(false)
       return
     }
 
-    const result = await loginUser(email, password)
+    const result = await loginUser(trimmedEmail.toLowerCase(), trimmedPassword)
 
     if (result.success) {
-      const { id, email: userEmail, nombre, role } = result.data
-      setSession({ id, email: userEmail, nombre, role })
+      const { id, email: userEmail, nombre, role: rawRole } = result.data
+      const normalizedRole = String(rawRole || '')
+        .trim()
+        .toLowerCase()
+        .replace(/á/g, 'a')
+        .replace(/é/g, 'e')
+        .replace(/í/g, 'i')
+        .replace(/ó/g, 'o')
+        .replace(/ú/g, 'u')
+
+      const role =
+        normalizedRole === 'admin' ||
+        normalizedRole === 'administrador' ||
+        normalizedRole === '1'
+          ? 'admin'
+          : 'worker'
+
+      const sessionData = { id, email: userEmail, nombre, role }
+      if (role === 'worker') {
+        const trabajador = Agro.getTrabajadorByEmail(userEmail)
+        if (trabajador) {
+          sessionData.workerKey = trabajador.key
+        }
+      }
+      setSession(sessionData)
       navigate(role === 'admin' ? '/admin' : '/worker', { replace: true })
     } else {
       window.alert(result.message || 'Credenciales no válidas. Intente nuevamente.')

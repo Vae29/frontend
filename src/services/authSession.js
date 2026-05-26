@@ -1,19 +1,14 @@
-const KEY = 'agroAuth'
+// Sesión en memoria (sin localStorage)
+let currentSession = null
 
 export function getSession() {
-  try {
-    const raw = localStorage.getItem(KEY)
-    if (!raw) return null
-    return JSON.parse(raw)
-  } catch {
-    return null
-  }
+  return currentSession
 }
 
 export function setSession(session) {
-  localStorage.setItem(KEY, JSON.stringify(session))
+  currentSession = session
 }
 
 export function clearSession() {
-  localStorage.removeItem(KEY)
+  currentSession = null
 }
