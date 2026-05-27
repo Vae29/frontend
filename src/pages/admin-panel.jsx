@@ -15,6 +15,7 @@ import '../styles/admin-panel.css'
 import { fetchFincas, createFinca, updateFinca, deleteFinca } from '../services/fincaService'
 import { fetchDashboardForFinca } from '../services/dashboardService'
 import { fetchCultivosPorFinca } from '../services/cultivoService'
+import * as reportService from '../services/reportService'
 
 import { MODAL_TYPES, DEPARTAMENTOS, MUNICIPIOS_POR_DEPARTAMENTO } from '../utils/modalConfig'
 import Swal from 'sweetalert2'
@@ -128,6 +129,10 @@ export default function AdminPanel() {
   const [filtroCategoriaCosto, setFiltroCategoriaCosto] = useState('')
   const [filtroUsuario, setFiltroUsuario] = useState('')
   const [filtroEstadoCultivo, setFiltroEstadoCultivo] = useState('')
+  const [filterOptions, setFilterOptions] = useState({ cultivos: [], usuarios: [], estados: [], categorias: [] })
+  const [reportData, setReportData] = useState(null)
+  const [isLoadingReport, setIsLoadingReport] = useState(false)
+  const [reportMessage, setReportMessage] = useState(null)
   // Variable para forzar recarga de fincas cuando se agrega una nueva.
   const [fincasRefresh, setFincasRefresh] = useState(0)
   // Controla la apertura del modal dinámico.
@@ -191,6 +196,23 @@ export default function AdminPanel() {
     window.addEventListener('agro:fincaChanged', handler)
     return () => window.removeEventListener('agro:fincaChanged', handler)
   }, [])
+
+  // Carga opciones dinámicas para filtros (cultivos, usuarios, estados, categorias)
+  useEffect(() => {
+    const loadFilters = async () => {
+      try {
+        const res = await reportService.fetchReportFilters(fincaId)
+        if (res && res.success) {
+          setFilterOptions(res.data)
+        } else {
+          console.warn('No se pudieron cargar filtros de reportes', res)
+        }
+      } catch (err) {
+        console.error('Error cargando filtros:', err)
+      }
+    }
+    loadFilters()
+  }, [fincaId])
 
   // Cierra automáticamente la notificación después de 3 segundos.
   useEffect(() => {
@@ -340,6 +362,65 @@ export default function AdminPanel() {
 
   const handleBuscarFincas = () => {
     fetchFincasList(searchTerm)
+  }
+
+  const buildFiltersObject = () => ({
+    fincaId: fincaId ? Number(fincaId) : null,
+    cultivoId: filtroCultivo ? Number(filtroCultivo) : null,
+    categoriaId: filtroCategoriaCosto ? Number(filtroCategoriaCosto) : null,
+    usuarioId: filtroUsuario ? Number(filtroUsuario) : null,
+    estado: filtroEstadoCultivo || null,
+    fechaInicio: filtroFechaInicio || null,
+    fechaFin: filtroFechaFin || null,
+  })
+
+  const fetchReport = async (tipo) => {
+    setIsLoadingReport(true)
+    setReportMessage(null)
+    try {
+      const filters = buildFiltersObject()
+      let res = null
+      switch (tipo) {
+        case 'por-cultivo':
+          res = await reportService.fetchReportPorCultivo(filters)
+          break
+        case 'costos':
+          res = await reportService.fetchReportCostos(filters)
+          break
+        case 'produccion':
+          res = await reportService.fetchReportProduccion(filters)
+          break
+        case 'rentabilidad':
+          res = await reportService.fetchReportRentabilidad(filters)
+          break
+        case 'trabajador':
+          res = await reportService.fetchReportTrabajador(filters)
+          break
+        default:
+          res = await reportService.fetchReportQuery(tipo, filters)
+          break
+      }
+
+      if (!res || res.success === false) {
+        setReportData([])
+        setReportMessage(res?.error || 'Error ejecutando reporte')
+      } else {
+        setReportData(res.data || [])
+        setReportMessage(res.message || null)
+      }
+    } catch (error) {
+      console.error('fetchReport error', error)
+      setReportData([])
+      setReportMessage('Error de conexión')
+    } finally {
+      setIsLoadingReport(false)
+    }
+  }
+
+  const openReport = async (tipo) => {
+    setReportType(tipo)
+    setReportVisible(true)
+    await fetchReport(tipo)
   }
 
   const handleOpenFincaModal = (finca = null) => {
@@ -871,11 +952,7 @@ export default function AdminPanel() {
     },
   ]
 
-  // Abre un reporte específico y muestra la sección de reportes.
-  const openReport = (tipo) => {
-    setReportType(tipo)
-    setReportVisible(true)
-  }
+  // (openReport definido más abajo con carga de datos)
 
   // Exporta el reporte visible a PDF usando html2pdf.
   const exportPdf = async () => {
@@ -1026,65 +1103,38 @@ export default function AdminPanel() {
             <div className="kpi-container">
               <div className="kpi-card">
                 <div className="kpi-header">
-                  <h3>Costo Total Finca</h3>
-                  <span className="icon">💰</span>
+                  <h3>Costos</h3>
+                  <span className="icon">💸</span>
                 </div>
-                <div className="kpi-value" id="kpiCostoTotal">
-                  {Agro.formatCOP(resumen.costos)}
-                </div>
+                <div className="kpi-value">{Agro.formatCOP(resumen.costos)}</div>
                 <div className="kpi-subtext">{costTrendText}</div>
               </div>
+
               <div className="kpi-card">
                 <div className="kpi-header">
-                  <h3>Ingresos Totales</h3>
-                  <span className="icon">💵</span>
+                  <h3>Ingresos</h3>
+                  <span className="icon">📦</span>
                 </div>
-                <div className="kpi-value" id="kpiIngresosTotales">
-                  {Agro.formatCOP(resumen.ingresos)}
-                </div>
+                <div className="kpi-value">{Agro.formatCOP(resumen.ingresos)}</div>
                 <div className="kpi-subtext">{ingresosSubtext}</div>
               </div>
+
               <div className="kpi-card">
                 <div className="kpi-header">
-                  <h3>Ganancia Total</h3>
+                  <h3>Ganancia</h3>
                   <span className="icon">📈</span>
                 </div>
-                <div className="kpi-value" id="kpiGananciaTotal">
-                  {Agro.formatCOP(resumen.ganancia)}
-                </div>
-                <div className="kpi-subtext">
-                  Margen: <span id="kpiMargen">{Number(margin || 0).toFixed(1)}%</span>
-                </div>
+                <div className="kpi-value" id="kpiGananciaTotal">{Agro.formatCOP(resumen.ganancia)}</div>
+                <div className="kpi-subtext">Margen estimado</div>
               </div>
+
               <div className="kpi-card">
                 <div className="kpi-header">
                   <h3>Producción Total</h3>
                   <span className="icon">📦</span>
                 </div>
-                <div className="kpi-value" id="kpiProduccionTotal">
-                  {resumen.produccionKg.toLocaleString('es-CO')} kg
-                </div>
+                <div className="kpi-value" id="kpiProduccionTotal">{resumen.produccionKg.toLocaleString('es-CO')} kg</div>
                 <div className="kpi-subtext">Basado en cosechas registradas</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-header">
-                  <h3>Cultivos Activos</h3>
-                  <span className="icon">🌱</span>
-                </div>
-                <div className="kpi-value" id="kpiCultivosActivos">
-                  {resumen.cultivosActivos}
-                </div>
-                <div className="kpi-subtext">En diferentes etapas</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-header">
-                  <h3>Cultivos Finalizados</h3>
-                  <span className="icon">✅</span>
-                </div>
-                <div className="kpi-value" id="kpiCultivosFinalizados">
-                  {resumen.cultivosFinalizados}
-                </div>
-                <div className="kpi-subtext">Este período</div>
               </div>
             </div>
 
@@ -1777,38 +1827,44 @@ export default function AdminPanel() {
                     <label>Cultivo</label>
                     <select id="filtroCultivo" className="filtro-select" value={filtroCultivo} onChange={(e) => setFiltroCultivo(e.target.value)}>
                       <option value="">Todos los cultivos</option>
-                      <option value="tomate">Tomate Cherry</option>
-                      <option value="lechuga">Lechuga Iceberg</option>
-                      <option value="pepino">Pepino</option>
-                      <option value="pimenton">Pimentón Rojo</option>
+                      {filterOptions.cultivos.map((cultivo) => (
+                        <option key={cultivo.id} value={cultivo.id}>
+                          {cultivo.nombre}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div className="filtro-group">
                     <label>Categoría de Costo</label>
                     <select id="filtroCategoriaCosto" className="filtro-select" value={filtroCategoriaCosto} onChange={(e) => setFiltroCategoriaCosto(e.target.value)}>
                       <option value="">Todas las categorías</option>
-                      <option value="insumos">Insumos</option>
-                      <option value="personal">Personal</option>
-                      <option value="equipos">Equipos</option>
-                      <option value="otros">Otros</option>
+                      {filterOptions.categorias.map((categoria) => (
+                        <option key={categoria.id} value={categoria.id}>
+                          {categoria.nombre}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div className="filtro-group">
                     <label>Usuario</label>
                     <select id="filtroUsuario" className="filtro-select" value={filtroUsuario} onChange={(e) => setFiltroUsuario(e.target.value)}>
                       <option value="">Todos los usuarios</option>
-                      <option value="1">Juan Pérez</option>
-                      <option value="2">María García</option>
-                      <option value="3">Carlos López</option>
+                      {filterOptions.usuarios.map((usuario) => (
+                        <option key={usuario.id} value={usuario.id}>
+                          {usuario.nombre} {usuario.apellidos}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div className="filtro-group">
                     <label>Estado del Cultivo</label>
                     <select id="filtroEstadoCultivo" className="filtro-select" value={filtroEstadoCultivo} onChange={(e) => setFiltroEstadoCultivo(e.target.value)}>
                       <option value="">Todos los estados</option>
-                      <option value="activo">Activo</option>
-                      <option value="finalizado">Finalizado</option>
-                      <option value="pausado">Pausado</option>
+                      {filterOptions.estados.map((estado) => (
+                        <option key={estado.id} value={estado.nombre}>
+                          {estado.nombre}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div className="filtro-group">
@@ -1816,12 +1872,15 @@ export default function AdminPanel() {
                       type="button"
                       id="btnAplicarFiltros"
                       className="btn-primary"
-                      onClick={() =>
-                        showNotification(
-                          `Filtros registrados (${filtroFechaInicio || '—'} → ${filtroFechaFin || '—'})`,
-                          'info',
-                        )
-                      }
+                      onClick={async () => {
+                        // Ejecuta el reporte actual con los filtros seleccionados
+                        if (!reportType) {
+                          showNotification('Selecciona primero un tipo de reporte', 'error')
+                          return
+                        }
+                        await fetchReport(reportType)
+                        showNotification('Filtros aplicados', 'info')
+                      }}
                     >
                       Aplicar Filtros
                     </button>
@@ -1836,6 +1895,9 @@ export default function AdminPanel() {
                         setFiltroCategoriaCosto('')
                         setFiltroUsuario('')
                         setFiltroEstadoCultivo('')
+                        setReportData(null)
+                        setReportMessage(null)
+                        showNotification('Filtros limpiados', 'info')
                       }}
                     >
                       Limpiar
@@ -1869,7 +1931,13 @@ export default function AdminPanel() {
               >
                 {reportVisible && reportType ? (
                   <>
-                    <AdminReportTable fincaId={fincaId} reportType={reportType} />
+                    {isLoadingReport ? (
+                      <div style={{ padding: 20 }}>Cargando reporte...</div>
+                    ) : reportMessage ? (
+                      <div style={{ padding: 20 }}>{reportMessage}</div>
+                    ) : (
+                      <AdminReportTable fincaId={fincaId} reportType={reportType} reportData={reportData} />
+                    )}
                     <div className="reporte-exportar">
                       <button type="button" className="btn-exportar pdf" onClick={() => exportPdf()}>
                         Exportar PDF

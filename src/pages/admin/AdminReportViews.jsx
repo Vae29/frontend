@@ -1,8 +1,15 @@
 import * as Agro from '../../services/agroData'
 
-export function AdminReportTable({ fincaId, reportType }) {
-  const cultivosFinca = Agro.getCultivosByFinca(fincaId)
-  const resumen = Agro.computeFincaResumen(fincaId)
+export function AdminReportTable({ fincaId, reportType, reportData }) {
+  // If reportData is provided by backend, prefer it. Otherwise fallback to local Agro mock data.
+  const data = reportData || null
+  const cultivosFinca = data && reportType === 'por-cultivo' ? data : Agro.getCultivosByFinca(fincaId)
+  const resumen = data && reportType === 'por-cultivo' ?
+    {
+      produccionKg: data.reduce((a, r) => a + (Number(r.total_produccion) || 0), 0),
+      ingresos: data.reduce((a, r) => a + (Number(r.total_ingresos) || 0), 0),
+      costos: data.reduce((a, r) => a + (Number(r.total_costos) || 0), 0),
+    } : Agro.computeFincaResumen(fincaId)
 
   if (reportType === 'por-cultivo') {
     return (
@@ -40,31 +47,42 @@ export function AdminReportTable({ fincaId, reportType }) {
             </tr>
           </thead>
           <tbody>
-            {cultivosFinca.length === 0 ? (
+            {(Array.isArray(cultivosFinca) && cultivosFinca.length === 0) ? (
               <tr>
                 <td colSpan={6} style={{ textAlign: 'center', padding: 20 }}>
                   Sin cultivos en la finca seleccionada
                 </td>
               </tr>
             ) : (
-              cultivosFinca.map((c) => {
-                const ingresos = Agro.computeCultivoIngresos(c.id)
-                const costos = Agro.computeCultivoCostos(c.id)
-                const ganancia = ingresos - costos
-                const produccion = (Agro.getDetalleCultivo(c.id).cosechas || []).reduce((a, x) => a + (Number(x.cantidad) || 0), 0)
-                return (
-                  <tr key={c.id}>
-                    <td>{c.nombre}</td>
-                    <td>
-                      <span className={`status-badge status-${c.estado}`}>{c.estado.replace('-', ' ')}</span>
-                    </td>
-                    <td>{produccion.toLocaleString('es-CO')} kg</td>
-                    <td>{Agro.formatCOP(costos)}</td>
-                    <td>{Agro.formatCOP(ingresos)}</td>
-                    <td>{Agro.formatCOP(ganancia)}</td>
-                  </tr>
-                )
-              })
+              (reportData && reportType === 'por-cultivo'
+                ? reportData.map((c, idx) => (
+                    <tr key={c.id || idx}>
+                      <td>{c.cultivo}</td>
+                      <td>{/* estado no siempre viene desde consulta */}</td>
+                      <td>{Number(c.total_produccion || 0).toLocaleString('es-CO')} kg</td>
+                      <td>{Agro.formatCOP(Number(c.total_costos || 0))}</td>
+                      <td>{Agro.formatCOP(Number(c.total_ingresos || 0))}</td>
+                      <td>{Agro.formatCOP(Number((c.total_ingresos || 0) - (c.total_costos || 0)))}</td>
+                    </tr>
+                  ))
+                : cultivosFinca.map((c) => {
+                    const ingresos = Agro.computeCultivoIngresos(c.id)
+                    const costos = Agro.computeCultivoCostos(c.id)
+                    const ganancia = ingresos - costos
+                    const produccion = (Agro.getDetalleCultivo(c.id).cosechas || []).reduce((a, x) => a + (Number(x.cantidad) || 0), 0)
+                    return (
+                      <tr key={c.id}>
+                        <td>{c.nombre}</td>
+                        <td>
+                          <span className={`status-badge status-${c.estado}`}>{c.estado.replace('-', ' ')}</span>
+                        </td>
+                        <td>{produccion.toLocaleString('es-CO')} kg</td>
+                        <td>{Agro.formatCOP(costos)}</td>
+                        <td>{Agro.formatCOP(ingresos)}</td>
+                        <td>{Agro.formatCOP(ganancia)}</td>
+                      </tr>
+                    )
+                  }))
             )}
           </tbody>
         </table>
@@ -74,6 +92,55 @@ export function AdminReportTable({ fincaId, reportType }) {
 
   if (reportType === 'costos') {
     const rows = []
+    if (reportData && reportType === 'costos') {
+      // usar datos provenientes del backend
+      const total = reportData.reduce((a, r) => a + Number(r.valor || r.valor || 0), 0)
+      const displayRows = reportData.length ? reportData : [{ categoria: '--', cultivo: '--', descripcion: 'Sin costos', valor: '$0', fecha: '--' }]
+      return (
+        <div>
+          <div className="reporte-header">
+            <h3>Reporte de Costos</h3>
+          </div>
+          <div className="reporte-resumen">
+            <div className="resumen-item">
+              <label>Total Costos</label>
+              <div className="valor">{Agro.formatCOP(total)}</div>
+            </div>
+            <div className="resumen-item">
+              <label>Costos Generales</label>
+              <div className="valor">{Agro.formatCOP(0)}</div>
+            </div>
+            <div className="resumen-item">
+              <label>Costos por Cultivo</label>
+              <div className="valor">{Agro.formatCOP(total)}</div>
+            </div>
+          </div>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Categoría</th>
+                <th>Cultivo</th>
+                <th>Descripción</th>
+                <th>Monto</th>
+                <th>Fecha</th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayRows.map((r, i) => (
+                <tr key={i}>
+                  <td>{r.categoria}</td>
+                  <td>{r.cultivo}</td>
+                  <td>{r.descripcion}</td>
+                  <td>{Agro.formatCOP(Number(r.valor || 0))}</td>
+                  <td>{r.fecha}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+    // fallback to client-side implementation
     cultivosFinca.forEach((c) => {
       const detalle = Agro.getDetalleCultivo(c.id)
       ;(detalle.costos || []).forEach((cost) => {
@@ -131,18 +198,20 @@ export function AdminReportTable({ fincaId, reportType }) {
 
   if (reportType === 'produccion') {
     const cosechas = []
-    cultivosFinca.forEach((c) => {
-      const detalle = Agro.getDetalleCultivo(c.id)
-      ;(detalle.cosechas || []).forEach((x) => {
-        const ingreso = (Number(x.cantidad) || 0) * Agro.parseMoney(x.precio)
-        cosechas.push({ cultivo: c.nombre, ...x, ingreso })
+    if (reportData && reportType === 'produccion') {
+      // backend returns rows: { cultivo, cantidad, fecha, precio_unitario }
+      reportData.forEach((r) => cosechas.push({ cultivo: r.cultivo, cantidad: r.cantidad, unidad: r.unidad || 'kg', fecha: r.fecha, precio: r.precio_unitario || 0, ingreso: (Number(r.cantidad) || 0) * (Number(r.precio_unitario) || 0) }))
+    } else {
+      cultivosFinca.forEach((c) => {
+        const detalle = Agro.getDetalleCultivo(c.id)
+        ;(detalle.cosechas || []).forEach((x) => {
+          const ingreso = (Number(x.cantidad) || 0) * Agro.parseMoney(x.precio)
+          cosechas.push({ cultivo: c.nombre, ...x, ingreso })
+        })
       })
-    })
+    }
     const prodTotal = cosechas.reduce((a, x) => a + (Number(x.cantidad) || 0), 0)
-    const display =
-      cosechas.length > 0
-        ? cosechas
-        : [{ cultivo: '--', cantidad: 0, unidad: 'kg', fecha: '--', precio: '$0', ingreso: 0 }]
+    const display = cosechas.length > 0 ? cosechas : [{ cultivo: '--', cantidad: 0, unidad: 'kg', fecha: '--', precio: '$0', ingreso: 0 }]
 
     return (
       <div>
@@ -194,13 +263,18 @@ export function AdminReportTable({ fincaId, reportType }) {
   }
 
   if (reportType === 'rentabilidad') {
-    const rows = cultivosFinca.map((c) => {
-      const ingresos = Agro.computeCultivoIngresos(c.id)
-      const costos = Agro.computeCultivoCostos(c.id)
-      const ganancia = ingresos - costos
-      const margen = ingresos > 0 ? (ganancia / ingresos) * 100 : 0
-      return { cultivo: c.nombre, ingresos, costos, ganancia, margen }
-    })
+    let rows = []
+    if (reportData && reportType === 'rentabilidad') {
+      rows = reportData.map((r) => ({ cultivo: r.cultivo, ingresos: Number(r.total_ingresos || 0), costos: Number(r.total_costos || 0), ganancia: Number(r.ganancia || 0), margen: r.total_ingresos ? ((Number(r.ganancia || 0) / Number(r.total_ingresos || 1)) * 100) : 0 }))
+    } else {
+      rows = cultivosFinca.map((c) => {
+        const ingresos = Agro.computeCultivoIngresos(c.id)
+        const costos = Agro.computeCultivoCostos(c.id)
+        const ganancia = ingresos - costos
+        const margen = ingresos > 0 ? (ganancia / ingresos) * 100 : 0
+        return { cultivo: c.nombre, ingresos, costos, ganancia, margen }
+      })
+    }
     const gananciaTotal = rows.reduce((a, x) => a + x.ganancia, 0)
     const ingresosTotal = rows.reduce((a, x) => a + x.ingresos, 0)
     const margenProm = ingresosTotal > 0 ? (gananciaTotal / ingresosTotal) * 100 : 0
@@ -253,16 +327,20 @@ export function AdminReportTable({ fincaId, reportType }) {
   }
 
   if (reportType === 'trabajador') {
-    const asg = Agro.asignaciones.filter((a) => a.fincaId === fincaId)
-    const trabajadoresIds = Array.from(new Set(asg.map((a) => a.trabajadorId)))
-    const rows = trabajadoresIds.map((id) => {
-      const t = Agro.trabajadores.find((x) => x.id === id)
-      const cultivosCount = asg
-        .filter((a) => a.trabajadorId === id)
-        .reduce((acc, x) => acc + (x.cultivoIds || []).length, 0)
-      return { nombre: t ? t.nombre : `Trabajador ${id}`, cultivos: cultivosCount }
-    })
-    const display = rows.length > 0 ? rows : [{ nombre: '--', cultivos: 0 }]
+    let displayRows = []
+    let totalTrabajadores = 0
+
+    if (reportData && reportType === 'trabajador' && Array.isArray(reportData)) {
+      displayRows = reportData.map((r) => ({
+        nombre: r.nombre,
+        actividades: r.actividades || '--',
+        total_costos: r.total_costos || 0,
+        cultivos: r.cultivos_asignados || 0,
+      }))
+      totalTrabajadores = displayRows.length
+    } else {
+      displayRows = [{ nombre: '--', actividades: '--', total_costos: '--', cultivos: 0 }]
+    }
 
     return (
       <div>
@@ -272,7 +350,7 @@ export function AdminReportTable({ fincaId, reportType }) {
         <div className="reporte-resumen">
           <div className="resumen-item">
             <label>Total Trabajadores</label>
-            <div className="valor">{rows.length}</div>
+            <div className="valor">{totalTrabajadores}</div>
           </div>
           <div className="resumen-item">
             <label>Actividades Registradas</label>
@@ -289,12 +367,12 @@ export function AdminReportTable({ fincaId, reportType }) {
             </tr>
           </thead>
           <tbody>
-            {display.map((r, i) => (
+            {displayRows.map((r, i) => (
               <tr key={i}>
                 <td>{r.nombre}</td>
-                <td>--</td>
-                <td>--</td>
-                <td>{r.cultivos}</td>
+                <td>{r.actividades ?? '--'}</td>
+                <td>{r.total_costos ? Agro.formatCOP(Number(r.total_costos)) : '--'}</td>
+                <td>{r.cultivos ?? r.cultivos_asignados ?? 0}</td>
               </tr>
             ))}
           </tbody>
