@@ -1,12 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as Agro from '../services/agroData'
 import { clearSession, getSession } from '../services/authSession'
-import { getInventarioElementos } from '../utils/inventarioElementos'
-import { MODAL_TYPES, DEPARTAMENTOS, MUNICIPIOS_POR_DEPARTAMENTO } from '../utils/modalConfig'
 import { fetchUsers, createUser, updateUser, deleteUser } from '../services/authApi'
-import { fetchFincas, createFinca, updateFinca, deleteFinca } from '../services/fincaService'
-import { fetchDashboardForFinca } from '../services/dashboardService'
+import { fetchCultivosEnProceso } from '../services/asignaciones-usuarioAPI'
+import { getInventarioElementos } from '../utils/inventarioElementos'
 import Header from '../components/Header'
 import Sidebar from '../components/Sidebar'
 import DynamicModal from '../components/DynamicModal'
@@ -14,8 +12,15 @@ import { updateAdminDashboardCharts, updateRentabilidadCharts } from './admin/ad
 import { AdminReportTable } from './admin/AdminReportViews'
 import '../styles/dashboard.css'
 import '../styles/admin-panel.css'
+import { fetchFincas, createFinca, updateFinca, deleteFinca } from '../services/fincaService'
+import { fetchDashboardForFinca } from '../services/dashboardService'
+import { fetchCultivosPorFinca } from '../services/cultivoService'
+
+import { MODAL_TYPES, DEPARTAMENTOS, MUNICIPIOS_POR_DEPARTAMENTO } from '../utils/modalConfig'
 import Swal from 'sweetalert2'
 
+// Nombres de secciones que se usan en la navegación del panel admin.
+// Esta constante asigna un identificador interno a un título visible.
 const SECTION_TITLES = {
   dashboard: 'Dashboard',
   fincas: 'Gestión de Fincas',
@@ -27,23 +32,8 @@ const SECTION_TITLES = {
   alertas: 'Centro de Alertas',
 }
 
-// DEPARTAMENTOS y MUNICIPIOS centralizados en modalConfig
-
-const ASIGNACIONES_BY_USUARIO = {
-  2: [
-    { finca: 'Finca Monterrey', cultivos: 'Naranja, Plátano' },
-    { finca: 'Finca Miraflores', cultivos: 'Tomate' },
-  ],
-  3: [
-    { finca: 'Finca Miraflores', cultivos: 'Naranja, Maíz' },
-    { finca: 'Finca Monterrey', cultivos: 'Plátano' },
-  ],
-  4: [
-    { finca: 'Finca Miraflores', cultivos: 'Tomate, Maíz' },
-    { finca: 'Finca Monterrey', cultivos: 'Naranja' },
-  ],
-}
-
+// Convierte el nombre de una etapa en una clase CSS segura.
+// Ejemplo: "Preparación Inicial" => "preparacion-inicial".
 function etapaClassName(nombre) {
   return nombre
     .toLowerCase()
@@ -53,6 +43,11 @@ function etapaClassName(nombre) {
     .replace(/í/g, 'i')
     .replace(/ó/g, 'o')
     .replace(/ú/g, 'u')
+}
+
+function isValidFincaId(value) {
+  const numberValue = Number(value)
+  return Number.isInteger(numberValue) && numberValue > 0
 }
 
 const COSTOS_GENERALES_ROWS = [
@@ -91,26 +86,41 @@ const COSTOS_GENERALES_ROWS = [
 ]
 
 export default function AdminPanel() {
+  // Hook para cambiar de ruta cuando el usuario no tiene permiso o cierra sesión.
   const navigate = useNavigate()
+  // Sesión actual del usuario; se usa para validar rol de administrador.
   const session = getSession()
 
-  const [fincaId, setFincaId] = useState(() => Agro.getSelectedFincaId())
+  // Estado local del componente administrado por React.
+  // fincaId guarda la finca seleccionada actualmente.
+  const [fincaId, setFincaId] = useState(() => {
+    const initial = Agro.getSelectedFincaId()
+    return isValidFincaId(initial) ? String(initial) : ''
+  })
   const [activeSection, setActiveSection] = useState(() => {
     const s = localStorage.getItem('activeSection') || 'dashboard'
     if (s === 'detalle-cultivo') return 'cultivos'
     return s
   })
+  // Título que se muestra en la cabecera según la sección activa.
   const [pageTitle, setPageTitle] = useState(() => {
     const normalized = 'dashboard'
     return SECTION_TITLES[normalized] || 'Dashboard'
   })
   const [selectedCultivoId, setSelectedCultivoId] = useState(null)
+  // El usuario seleccionado para ver asignaciones de fincas/cultivos.
   const [activeUsuarioId, setActiveUsuarioId] = useState(null)
+  // Controla si se muestran las asignaciones de usuario.
   const [asignacionesOpen, setAsignacionesOpen] = useState(false)
+  // Estado para mostrar información detallada de inventario en costos de cultivo.
   const [elementosCultivo, setElementosCultivo] = useState({ open: false, rows: [] })
+  // Estado para mostrar información detallada de inventario en costos generales.
   const [elementosGenerales, setElementosGenerales] = useState({ open: false, rows: [] })
+  // Toast de notificaciones breves.
   const [toast, setToast] = useState(null)
+  // Controla si el panel de reportes está visible.
   const [reportVisible, setReportVisible] = useState(false)
+  // Tipo de reporte seleccionado para generar contenido.
   const [reportType, setReportType] = useState(null)
   const [filtroFechaInicio, setFiltroFechaInicio] = useState('')
   const [filtroFechaFin, setFiltroFechaFin] = useState('')
@@ -118,22 +128,48 @@ export default function AdminPanel() {
   const [filtroCategoriaCosto, setFiltroCategoriaCosto] = useState('')
   const [filtroUsuario, setFiltroUsuario] = useState('')
   const [filtroEstadoCultivo, setFiltroEstadoCultivo] = useState('')
-  const [modalInitialData, setModalInitialData] = useState({})
+  // Variable para forzar recarga de fincas cuando se agrega una nueva.
+  const [fincasRefresh, setFincasRefresh] = useState(0)
+  // Controla la apertura del modal dinámico.
+  const [showDynamicModal, setShowDynamicModal] = useState(false)
+  // Tipo de modal dinámico que se muestra (usuario, cultivo, costo, finca).
+  const [dynamicModalType, setDynamicModalType] = useState(null)
+  // Usuario que está siendo editado actualmente.
+  const [editingUser, setEditingUser] = useState(null)
+  // Lista de usuarios cargados desde el backend.
+  const [users, setUsers] = useState([])
+  // Opciones dinámicas para los campos del modal.
   const [modalFieldOptions, setModalFieldOptions] = useState({})
+  // Datos de fincas y cultivos para mostrar las asignaciones reales.
+  const [fincasData, setFincasData] = useState([])
+  const [cultivosData, setCultivosData] = useState([])
+
+  const [modalInitialData, setModalInitialData] = useState({})
   const [fincas, setFincas] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
   const [isLoadingFincas, setIsLoadingFincas] = useState(false)
   const [dashboardData, setDashboardData] = useState(null)
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(false)
   const [dashboardError, setDashboardError] = useState(null)
+  const [cultivos, setCultivos] = useState([])
+  const [isLoadingCultivos, setIsLoadingCultivos] = useState(false)
   const [editingFinca, setEditingFinca] = useState(null)
-  const [fincasRefresh, setFincasRefresh] = useState(0)
-  const [showDynamicModal, setShowDynamicModal] = useState(false)
-  const [dynamicModalType, setDynamicModalType] = useState(null)
-  // Usuario seleccionado y lista de usuarios (valery integration)
-  const [editingUser, setEditingUser] = useState(null)
-  const [users, setUsers] = useState([])
 
+  // Memoize initial data for DynamicModal to avoid recreating object each render
+  const memoizedModalInitialData = useMemo(() => {
+    if (!editingUser) return undefined
+    return {
+      nombre: editingUser.nombre || '',
+      apellidos: editingUser.apellidos || '',
+      correo: editingUser.email || '',
+      contraseña: editingUser.password || '',
+      rol: editingUser.rol?.toLowerCase() || '',
+      fincas: Array.isArray(editingUser.fincas) ? editingUser.fincas.map(Number).filter(Boolean) : [],
+      cultivos: Array.isArray(editingUser.cultivos) ? editingUser.cultivos.map(Number).filter(Boolean) : [],
+    }
+  }, [editingUser])
+
+  // Refs para elementos DOM y gráficos.
   const reportRef = useRef(null)
   const cpRef = useRef(null)
   const ccRef = useRef(null)
@@ -142,18 +178,21 @@ export default function AdminPanel() {
   const crdRef = useRef(null)
   const cicRef = useRef(null)
 
+  // Valida que el usuario tenga rol de admin; si no, lo redirige al login.
   useEffect(() => {
     if (!session || session.role !== 'admin') {
       navigate('/', { replace: true })
     }
   }, [session, navigate])
 
+  // Escucha el evento global de cambio de finca y actualiza el estado local.
   useEffect(() => {
     const handler = () => setFincaId(Agro.getSelectedFincaId())
     window.addEventListener('agro:fincaChanged', handler)
     return () => window.removeEventListener('agro:fincaChanged', handler)
   }, [])
 
+  // Cierra automáticamente la notificación después de 3 segundos.
   useEffect(() => {
     if (!toast) return
     const t = setTimeout(() => setToast(null), 3000)
@@ -163,36 +202,73 @@ export default function AdminPanel() {
   // Carga la lista de usuarios desde el backend al iniciar el componente.
   useEffect(() => {
     const loadUsers = async () => {
-      try {
-        const response = await fetchUsers()
-        if (response.success) {
-          const usersWithNormalizedAssignments = response.data.map((user) => ({
-            ...user,
-            fincas: Array.isArray(user.fincas) ? user.fincas.map(Number).filter(Boolean) : [],
-            cultivos: Array.isArray(user.cultivos) ? user.cultivos.map(Number).filter(Boolean) : [],
-          }))
-          setUsers(usersWithNormalizedAssignments)
-        } else {
-          console.error('Error al cargar usuarios:', response.message)
-        }
-      } catch (error) {
-        console.error('Error en loadUsers:', error)
+      const response = await fetchUsers()
+      if (response.success) {
+        const usersWithNormalizedAssignments = response.data.map((user) => ({
+          ...user,
+          fincas: Array.isArray(user.fincas) ? user.fincas.map(Number).filter(Boolean) : [],
+          cultivos: Array.isArray(user.cultivos) ? user.cultivos.map(Number).filter(Boolean) : [],
+        }))
+        setUsers(usersWithNormalizedAssignments)
+      } else {
+        console.error('Error al cargar usuarios:', response.message)
       }
     }
 
     loadUsers()
   }, [])
 
+  useEffect(() => {
+    const loadAssignmentOptions = async () => {
+      const [fincasResponse, cultivosResponse] = await Promise.all([
+        fetchFincas(),
+        fetchCultivosEnProceso(),
+      ])
+
+      // Normalize fincasResponse to an array of fincas
+      const fincasArray = fincasResponse?.success
+        ? fincasResponse.data
+        : Array.isArray(fincasResponse)
+        ? fincasResponse
+        : fincasResponse?.data || []
+
+      // Normalize cultivosResponse to an array of cultivos
+      const cultivosArray = cultivosResponse?.success
+        ? cultivosResponse.data
+        : Array.isArray(cultivosResponse)
+        ? cultivosResponse
+        : cultivosResponse?.data || []
+
+      const fincasOptions = fincasArray.map((finca) => ({ value: finca.id, label: finca.nombre }))
+
+      const cultivosOptions = cultivosArray.map((cultivo) => ({
+        value: cultivo.id,
+        label: `${cultivo.nombre}`,
+        description: `Finca: ${cultivo.finca_nombre || 'No asignada'}`,
+        idfinca: cultivo.idfinca,
+      }))
+
+      setModalFieldOptions({ fincas: fincasOptions, cultivos: cultivosOptions })
+      setFincasData(fincasArray)
+      setCultivosData(cultivosArray)
+    }
+
+    loadAssignmentOptions()
+  }, [])
+
+  // Muestra una notificación rápida en pantalla.
   const showNotification = useCallback((message, type = 'info') => {
     setToast({ message, type })
   }, [])
 
-  const fetchDashboardData = useCallback(
+    const fetchDashboardData = useCallback(
     async (selectedFincaId) => {
       if (!selectedFincaId) return
+      const fincaNumericId = Number(selectedFincaId)
+      if (!Number.isInteger(fincaNumericId) || fincaNumericId <= 0) return
       try {
         setIsLoadingDashboard(true)
-        const data = await fetchDashboardForFinca(selectedFincaId)
+        const data = await fetchDashboardForFinca(fincaNumericId)
         setDashboardData(data)
         setDashboardError(null)
       } catch (error) {
@@ -206,14 +282,36 @@ export default function AdminPanel() {
     []
   )
 
+  const fetchCultivosData = useCallback(
+    async (selectedFincaId) => {
+      if (!selectedFincaId) return
+      const fincaNumericId = Number(selectedFincaId)
+      if (!Number.isInteger(fincaNumericId) || fincaNumericId <= 0) return
+      try {
+        setIsLoadingCultivos(true)
+        const data = await fetchCultivosPorFinca(fincaNumericId)
+        setCultivos(Array.isArray(data) ? data : [])
+      } catch (error) {
+        console.error('Error al cargar cultivos:', error)
+        setCultivos([])
+      } finally {
+        setIsLoadingCultivos(false)
+      }
+    },
+    []
+  )
+
   const fetchFincasList = useCallback(
     async (search = '') => {
       try {
         setIsLoadingFincas(true)
         const lista = await fetchFincas(search)
-        setFincas(lista)
-        if (!fincaId && lista.length > 0) {
-          setFincaId(String(lista[0].id))
+        const fincasArray = Array.isArray(lista) ? lista : Array.isArray(lista?.data) ? lista.data : []
+        setFincas(fincasArray)
+        const selectedId = String(fincaId || '')
+        const hasSelected = fincasArray.some((finca) => String(finca.id) === selectedId)
+        if (!hasSelected && fincasArray.length > 0) {
+          setFincaId(String(fincasArray[0].id))
         }
       } catch (error) {
         console.error(error)
@@ -235,6 +333,10 @@ export default function AdminPanel() {
   useEffect(() => {
     fetchDashboardData(fincaId)
   }, [fincaId, fincasRefresh, fetchDashboardData])
+
+  useEffect(() => {
+    fetchCultivosData(fincaId)
+  }, [fincaId, fincasRefresh, fetchCultivosData])
 
   const handleBuscarFincas = () => {
     fetchFincasList(searchTerm)
@@ -295,50 +397,252 @@ export default function AdminPanel() {
     }
   }
 
-  const handleOpenDynamicModal = (type) => {
-    setDynamicModalType(type)
-    // preparar opciones dinámicas (ej. para modal USUARIO)
-    if (type === MODAL_TYPES.USUARIO) {
-      ;(async () => {
-        try {
-          const fincasResponse = await fetchFincas()
-          const fincasOptions = Array.isArray(fincasResponse)
-            ? fincasResponse.map((finca) => ({ value: finca.id, label: finca.nombre }))
-            : []
+  // Filtra la lista de usuarios según el texto ingresado en el buscador.
+  const filteredUsers = users.filter((usuario) => {
+    if (!filtroUsuario) return true
+    const filterValue = filtroUsuario.trim().toLowerCase()
+    const nombreCompleto = `${usuario.nombre || ''} ${usuario.apellidos || ''}`.trim().toLowerCase()
+    return nombreCompleto.includes(filterValue)
+  })
 
-          const cultivosOptions = (Agro.cultivos || [])
-            .filter((c) => c.estado !== 'finalizado')
-            .map((c) => ({ value: c.id, label: c.nombre }))
+  const activeUsuario = useMemo(
+    () => users.find((usuario) => usuario.id === activeUsuarioId),
+    [users, activeUsuarioId]
+  )
+
+  const fincasById = useMemo(
+    () => Object.fromEntries(fincasData.map((finca) => [Number(finca.id), finca])),
+    [fincasData]
+  )
+
+  const cultivosById = useMemo(
+    () => Object.fromEntries(cultivosData.map((cultivo) => [Number(cultivo.id), cultivo])),
+    [cultivosData]
+  )
+
+  const activeUsuarioAssignments = useMemo(() => {
+    if (!activeUsuario) return []
+
+    const rowsMap = new Map()
+
+    ;(activeUsuario.cultivos || []).forEach((cultivoId) => {
+      const numCultivoId = Number(cultivoId)
+      const cultivo = cultivosById[numCultivoId]
+      if (!cultivo) return
+
+      const numFincaId = Number(cultivo.idfinca)
+      const fincaName = fincasById[numFincaId]?.nombre || 'Finca desconocida'
+
+      const existing = rowsMap.get(numFincaId) || {
+        finca: fincaName,
+        cultivos: [],
+      }
+      existing.cultivos.push(cultivo.nombre)
+      rowsMap.set(numFincaId, existing)
+    })
+
+    ;(activeUsuario.fincas || []).forEach((fincaId) => {
+      const numFincaId = Number(fincaId)
+      if (!rowsMap.has(numFincaId)) {
+        rowsMap.set(numFincaId, {
+          finca: fincasById[numFincaId]?.nombre || 'Finca desconocida',
+          cultivos: [],
+        })
+      }
+    })
+
+    return Array.from(rowsMap.values()).map((entry) => ({
+      finca: entry.finca,
+      cultivos: entry.cultivos.length > 0 ? entry.cultivos.join(', ') : 'Sin cultivos asignados',
+    }))
+  }, [activeUsuario, fincasById, cultivosById])
+
+  // Abre un modal dinámico de creación dependiendo del tipo seleccionado.
+  const handleOpenDynamicModal = (type) => {
+    setEditingUser(null)
+    setDynamicModalType(type)
+
+    if (type === MODAL_TYPES.USUARIO) {
+      setModalFieldOptions({ fincas: [], cultivos: [] })
+
+      const loadOptions = async () => {
+        try {
+          const [fincasResponse, cultivosResponse] = await Promise.all([
+            fetchFincas(),
+            fetchCultivosEnProceso(),
+          ])
+
+          const fincasArray = fincasResponse?.success
+            ? fincasResponse.data
+            : Array.isArray(fincasResponse)
+            ? fincasResponse
+            : fincasResponse?.data || []
+
+          const cultivosArray = cultivosResponse?.success
+            ? cultivosResponse.data
+            : Array.isArray(cultivosResponse)
+            ? cultivosResponse
+            : cultivosResponse?.data || []
+
+          const fincasOptions = fincasArray.map((finca) => ({ value: finca.id, label: finca.nombre }))
+          const cultivosOptions = cultivosArray.map((cultivo) => ({
+            value: cultivo.id,
+            label: cultivo.nombre,
+            description: `Finca: ${cultivo.finca_nombre || 'No asignada'}`,
+          }))
 
           setModalFieldOptions({ fincas: fincasOptions, cultivos: cultivosOptions })
-        } catch (err) {
-          console.error(err)
+
+          if (!fincasResponse?.success && !Array.isArray(fincasResponse)) {
+            showNotification('No se pudieron cargar las fincas', 'error')
+          }
+          if (!cultivosResponse?.success && !Array.isArray(cultivosResponse)) {
+            showNotification('No se pudieron cargar los cultivos', 'error')
+          }
+        } catch (error) {
+          console.error('Error cargando opciones de usuario:', error)
+          showNotification('Error cargando fincas y cultivos', 'error')
         }
-      })()
+      }
+
+      loadOptions()
     }
 
     setShowDynamicModal(true)
   }
 
+  // Abre el modal para editar un usuario existente.
+  const handleOpenEditUser = (usuario) => {
+    setEditingUser(usuario)
+    setDynamicModalType(MODAL_TYPES.USUARIO)
+    
+    // Carga las opciones necesarias para editar el usuario.
+    const loadOptions = async () => {
+      try {
+        const [fincasResponse, cultivosResponse] = await Promise.all([
+          fetchFincas(),
+          fetchCultivosEnProceso(),
+        ])
+
+        const fincasArray = fincasResponse?.success
+          ? fincasResponse.data
+          : Array.isArray(fincasResponse)
+          ? fincasResponse
+          : fincasResponse?.data || []
+
+        const cultivosArray = cultivosResponse?.success
+          ? cultivosResponse.data
+          : Array.isArray(cultivosResponse)
+          ? cultivosResponse
+          : cultivosResponse?.data || []
+
+        const fincasOptions = fincasArray.map((finca) => ({ value: finca.id, label: finca.nombre }))
+        const cultivosOptions = cultivosArray.map((cultivo) => ({
+          value: cultivo.id,
+          label: `${cultivo.nombre} (${cultivo.finca_nombre || 'No asignada'})`,
+          description: `Finca: ${cultivo.finca_nombre || 'No asignada'}`,
+        }))
+
+        setModalFieldOptions({ fincas: fincasOptions, cultivos: cultivosOptions })
+
+        if (!fincasResponse?.success && !Array.isArray(fincasResponse)) {
+          showNotification('No se pudieron cargar las fincas', 'error')
+        }
+        if (!cultivosResponse?.success && !Array.isArray(cultivosResponse)) {
+          showNotification('No se pudieron cargar los cultivos', 'error')
+        }
+      } catch (error) {
+        console.error('Error cargando opciones de edición de usuario:', error)
+        showNotification('Error cargando fincas y cultivos', 'error')
+      }
+    }
+
+    loadOptions()
+    
+    setShowDynamicModal(true)
+  }
+
+  // Cierra el modal dinámico y limpia el estado asociado.
   const handleCloseDynamicModal = () => {
     setShowDynamicModal(false)
     setDynamicModalType(null)
+    setEditingUser(null)
     setModalFieldOptions({})
   }
 
-  const handleSubmitDynamicModal = (formData) => {
-    // Por ahora solo mostramos la notificación
-    // Aquí es donde iría la lógica para guardar los datos según el tipo de modal
+  // Elimina un usuario después de pedir confirmación.
+  const handleDeleteUser = async (id) => {
+    const confirmDelete = window.confirm('¿Estás segura de que quieres eliminar este usuario?')
+    if (!confirmDelete) return
+
+    const response = await deleteUser(id)
+    if (!response.success) {
+      showNotification(response.message, 'error')
+      return
+    }
+
+    setUsers((prev) => prev.filter((usuario) => usuario.id !== id))
+    if (activeUsuarioId === id) {
+      setActiveUsuarioId(null)
+      setAsignacionesOpen(false)
+    }
+    showNotification('Usuario eliminado exitosamente', 'success')
+  }
+
+  // Envía los datos del modal dinámico según el tipo seleccionado.
+  const handleSubmitDynamicModal = async (formData) => {
     let successMessage = ''
 
     switch (dynamicModalType) {
-      case MODAL_TYPES.USUARIO:
-        successMessage = `Usuario "${formData.nombre}" agregado exitosamente`
+      case MODAL_TYPES.USUARIO: {
+        // Formatea nombres y apellidos a mayúsculas en inicial.
+        const formatWords = (value) =>
+          value
+            .trim()
+            .split(' ')
+            .filter(Boolean)
+            .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+            .join(' ')
+
+        const payload = {
+          nombre: formatWords(formData.nombre),
+          apellidos: formatWords(formData.apellidos),
+          correo: formData.correo.trim().toLowerCase(),
+          contraseña: formData.contraseña,
+          rol: formData.rol,
+          fincas: Array.isArray(formData.fincas) ? formData.fincas.map(Number).filter(Boolean) : [],
+          cultivos: Array.isArray(formData.cultivos) ? formData.cultivos.map(Number).filter(Boolean) : [],
+        }
+
+        if (editingUser) {
+          // Actualiza usuario existente.
+          const response = await updateUser(editingUser.id, payload)
+          if (!response.success) {
+            showNotification(response.message, 'error')
+            return
+          }
+
+          setUsers((prev) => prev.map((usuario) => (usuario.id === response.data.id ? response.data : usuario)))
+          successMessage = `Usuario "${response.data.nombre} ${response.data.apellidos}" actualizado exitosamente`
+        } else {
+          // Crea un nuevo usuario.
+          const response = await createUser(payload)
+          if (!response.success) {
+            showNotification(response.message, 'error')
+            return
+          }
+
+          setUsers((prev) => [...prev, response.data])
+          successMessage = `Usuario "${response.data.nombre} ${response.data.apellidos}" agregado exitosamente`
+        }
         break
+      }
       case MODAL_TYPES.CULTIVO:
+        // Solo muestra mensaje; no hay implementación real de creación de cultivo aquí.
         successMessage = `Cultivo "${formData.nombre}" agregado exitosamente`
         break
       case MODAL_TYPES.COSTO:
+        // Solo muestra mensaje; no hay implementación real de creación de costo aquí.
         successMessage = `Costo de ${formData.categoria} agregado exitosamente`
         break
       case MODAL_TYPES.FINCA: {
@@ -350,24 +654,22 @@ export default function AdminPanel() {
           return
         }
         const ubicacion = `${municipio}, ${departamento}`
-        ;(async () => {
-          try {
-            if (editingFinca) {
-              await updateFinca(editingFinca.id, { nombre, ubicacion })
-              showNotification(`Finca "${nombre}" actualizada exitosamente`, 'success')
-            } else {
-              await createFinca({ nombre, ubicacion })
-              showNotification(`Finca "${nombre}" agregada exitosamente`, 'success')
-            }
-            setFincasRefresh((prev) => prev + 1)
-            setEditingFinca(null)
-          } catch (error) {
-            console.error(error)
-            const message = error?.response?.data?.error || 'Error guardando la finca'
-            showNotification(message, 'error')
+        try {
+          if (editingFinca) {
+            await updateFinca(editingFinca.id, { nombre, ubicacion })
+            successMessage = `Finca "${nombre}" actualizada exitosamente`
+          } else {
+            await createFinca({ nombre, ubicacion })
+            successMessage = `Finca "${nombre}" agregada exitosamente`
           }
-        })()
-        successMessage = editingFinca ? `Finca "${nombre}" actualizada exitosamente` : `Finca "${nombre}" agregada exitosamente`
+          setFincasRefresh((prev) => prev + 1)
+          setEditingFinca(null)
+        } catch (error) {
+          console.error(error)
+          const message = error?.response?.data?.error || 'Error guardando la finca'
+          showNotification(message, 'error')
+          return
+        }
         break
       }
       default:
@@ -406,9 +708,12 @@ export default function AdminPanel() {
   const ingresosSubtext = dashboardData?.productionTrend?.length > 1 ? productionTrendText : 'Basado en ingresos registrados'
 
   const cultivosEnFinca = dashboardData?.cultivosEstado || []
+
+  // Detalle completo del cultivo seleccionado (cuando se hace clic en uno).
   const detalleCultivo = selectedCultivoId ? Agro.getDetalleCultivo(selectedCultivoId) : null
   const cultivoSeleccionado = selectedCultivoId ? Agro.cultivos.find((c) => c.id === selectedCultivoId) : null
 
+  // Suma los costos del cultivo seleccionado y cuenta los registros.
   const costosDetalleTotales = (() => {
     if (!detalleCultivo?.costos) return { total: 0, count: 0 }
     let total = 0
@@ -418,8 +723,11 @@ export default function AdminPanel() {
     return { total, count: detalleCultivo.costos.length }
   })()
 
+  // Datos para la tabla de rentabilidad en la sección de análisis.
   const rentabilidadRows = dashboardData?.rentability || []
 
+
+  // Cuando estamos en el dashboard, actualiza los gráficos usando el servicio adminCharts.
   useEffect(() => {
     if (activeSection !== 'dashboard' || !dashboardData) return
     const id = window.setTimeout(() => {
@@ -433,6 +741,7 @@ export default function AdminPanel() {
     return () => window.clearTimeout(id)
   }, [activeSection, dashboardData])
 
+  // Cuando estamos en la sección de rentabilidad, actualiza sus gráficos.
   useEffect(() => {
     if (activeSection !== 'rentabilidad' || !dashboardData) return
     const id = window.setTimeout(() => {
@@ -444,6 +753,7 @@ export default function AdminPanel() {
     return () => window.clearTimeout(id)
   }, [activeSection, dashboardData])
 
+  // Escucha el evento de cambio de finca y actualiza los gráficos de la sección activa.
   useEffect(() => {
     const handler = () => {
       if (!dashboardData) return
@@ -473,6 +783,7 @@ export default function AdminPanel() {
     return () => window.removeEventListener('agro:fincaChanged', handler)
   }, [activeSection, dashboardData, reportVisible, reportType])
 
+  // Cambia la sección activa del panel y guarda la selección en localStorage.
   const switchSection = (sectionId) => {
     if (sectionId !== 'detalle-cultivo') {
       setSelectedCultivoId(null)
@@ -481,6 +792,7 @@ export default function AdminPanel() {
     setPageTitle(SECTION_TITLES[sectionId] || 'Dashboard')
   }
 
+  // Cambia la finca seleccionada y notifica al usuario.
   const onFincaChange = (id) => {
     Agro.setSelectedFincaId(id)
     setFincaId(id)
@@ -488,6 +800,7 @@ export default function AdminPanel() {
     showNotification(`Finca ${fincaNombre} seleccionada`)
   }
 
+  // Cierra sesión y redirige a la página de inicio.
   const onLogout = async () => {
     const result = await Swal.fire({
       title: 'AgroGestion',
@@ -510,6 +823,7 @@ export default function AdminPanel() {
     navigate('/', { replace: true })
   }
 
+  // Abre la vista de detalle de un cultivo específico.
   const openCultivoDetalle = (cultivo) => {
     setSelectedCultivoId(cultivo.id)
     setActiveSection('detalle-cultivo')
@@ -517,6 +831,7 @@ export default function AdminPanel() {
     setElementosCultivo({ open: false, rows: [] })
   }
 
+  // Regresa de la vista de detalle a la lista de cultivos.
   const backToCultivos = () => {
     setSelectedCultivoId(null)
     setElementosCultivo({ open: false, rows: [] })
@@ -524,10 +839,12 @@ export default function AdminPanel() {
     setPageTitle('Gestión de Cultivos')
   }
 
+  // Desplaza suavemente la pantalla hacia una sección específica.
   const scrollToSection = (id) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
+  // Configuración de los enlaces del menú lateral.
   const navItems = [
     {
       title: 'Principal',
@@ -554,11 +871,13 @@ export default function AdminPanel() {
     },
   ]
 
+  // Abre un reporte específico y muestra la sección de reportes.
   const openReport = (tipo) => {
     setReportType(tipo)
     setReportVisible(true)
   }
 
+  // Exporta el reporte visible a PDF usando html2pdf.
   const exportPdf = async () => {
     if (!reportRef.current) return
     const html2pdf = (await import('html2pdf.js')).default
@@ -572,6 +891,7 @@ export default function AdminPanel() {
     html2pdf().set(opt).from(reportRef.current).save()
   }
 
+  // Exporta el reporte visible a Excel usando XLSX.
   const exportExcel = async () => {
     if (!reportRef.current) return
     const XLSX = await import('xlsx')
@@ -594,7 +914,9 @@ export default function AdminPanel() {
 
   const cultivosEstadoCards = cultivosEnFinca.map((c) => {
     const badgeClass = c.estado?.toLowerCase() === 'finalizado' ? 'completed' : 'active'
+
     const badgeText = badgeClass === 'completed' ? 'Finalizado' : 'Activo'
+
     return (
       <div key={c.id} className="cultivo-card">
         <div className="cultivo-header">
@@ -621,13 +943,16 @@ export default function AdminPanel() {
 
   return (
     <div className="container">
+      {/* Modal dinámico que se usa para crear o editar usuarios, cultivos, costos o fincas. */}
       <DynamicModal
         isOpen={showDynamicModal}
         modalType={dynamicModalType}
         onClose={handleCloseDynamicModal}
         onSubmit={handleSubmitDynamicModal}
+        title={editingUser ? 'Editar Usuario' : undefined}
+        submitButtonText={editingUser ? 'Actualizar Usuario' : undefined}
         fieldOptions={modalFieldOptions}
-        initialData={modalInitialData}
+        initialData={memoizedModalInitialData}
         onFieldChange={(name, value) => {
           if (name === 'departamento') {
             const municipios = value ? (MUNICIPIOS_POR_DEPARTAMENTO[value] || []) : []
@@ -661,6 +986,9 @@ export default function AdminPanel() {
         </div>
       ) : null}
 
+      
+
+      {/* Barra lateral con navegación, selección de finca y opción de cerrar sesión. */}
       <Sidebar
         roleSubtitle="Rol: Administrador"
         fincaOptions={fincas.length > 0 ? fincas : Agro.fincas}
@@ -675,6 +1003,7 @@ export default function AdminPanel() {
       />
 
       <main className="main-content">
+        {/* Encabezado principal que muestra el título actual y permite navegar dentro de un cultivo. */}
         <Header
           title={pageTitle}
           showNavCultivo={activeSection === 'detalle-cultivo'}
@@ -682,6 +1011,7 @@ export default function AdminPanel() {
         />
 
         <div className="content-container">
+          {/* Sección de dashboard general con indicadores clave, gráficos y alertas. */}
           <section id="dashboard-section" className={`content-section ${activeSection === 'dashboard' ? 'active' : ''}`}>
             {dashboardError ? (
               <div className="dashboard-error" style={{ marginBottom: 16, color: '#c0392b' }}>
@@ -723,7 +1053,7 @@ export default function AdminPanel() {
                   {Agro.formatCOP(resumen.ganancia)}
                 </div>
                 <div className="kpi-subtext">
-                  Margen: <span id="kpiMargen">{margin.toFixed(1)}%</span>
+                  Margen: <span id="kpiMargen">{Number(margin || 0).toFixed(1)}%</span>
                 </div>
               </div>
               <div className="kpi-card">
@@ -842,6 +1172,8 @@ export default function AdminPanel() {
             </div>
           </section>
 
+          {/* Sección de gestión de fincas: lista, búsqueda y botones de acción. */}
+          {/* Sección de gestión de fincas: lista, búsqueda y botones de acción. */}
           <section id="fincas-section" className={`content-section ${activeSection === 'fincas' ? 'active' : ''}`}>
             <div className="section-header">
               <div className="search-wrapper">
@@ -925,12 +1257,23 @@ export default function AdminPanel() {
             </div>
           </section>
 
+          {/* Sección de gestión de usuarios: búsqueda, lista y edición/ eliminación. */}
           <section id="usuarios-section" className={`content-section ${activeSection === 'usuarios' ? 'active' : ''}`}>
             <div className="section-header">
               <div className="search-wrapper">
-                <input type="text" className="search-input" placeholder="🔍 Buscar por nombre..." readOnly />
-                <button type="button" className="btn-search">
-                  Buscar
+                <input
+                  type="text"
+                  className="search-input"
+                  placeholder="Buscar por nombre..."
+                  value={filtroUsuario}
+                  onChange={(e) => setFiltroUsuario(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="btn-search"
+                  onClick={() => setFiltroUsuario('')}
+                >
+                  Limpiar
                 </button>
               </div>
               <button type="button" className="btn-add btn-primary" onClick={() => handleOpenDynamicModal(MODAL_TYPES.USUARIO)}>
@@ -952,50 +1295,47 @@ export default function AdminPanel() {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="data-item">
-                    <td data-field="nombre">Admin</td>
-                    <td data-field="email">admin123@gmail.com</td>
-                    <td data-field="password">Admin12345</td>
-                    <td data-field="rol">Administrador</td>
-                    <td data-field="acciones">
-                      <div className="action-buttons">
-                        <button type="button" className="btn-icon btn-edit" title="Editar">
-                          ✏️
-                        </button>
-                        <button type="button" className="btn-icon btn-delete" title="Eliminar">
-                          🗑️
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                  {[2, 3, 4].map((uid) => {
-                    const rows = [
-                      { id: 2, nombre: 'Carlos Mendez Rivas', email: 'carlos.mendez@gmail.com', pass: 'CarlosMendez2024', rol: 'Trabajador' },
-                      { id: 3, nombre: 'María Gonzalez Ortiz', email: 'maria.gonzalez@gmail.com', pass: 'MariaGonz2024', rol: 'Trabajador' },
-                      { id: 4, nombre: 'Juan Pablo Silva Flores', email: 'juan.silva@gmail.com', pass: 'JuanPablo2024', rol: 'Trabajador' },
-                    ]
-                    const u = rows.find((r) => r.id === uid)
+                  {filteredUsers.map((usuario) => {
+                    const isWorker = usuario.rol?.toString().toLowerCase() === 'trabajador'
+
                     return (
                       <tr
-                        key={uid}
-                        className={`data-item usuario-clickeable ${activeUsuarioId === uid ? 'activo' : ''}`}
+                        key={usuario.id}
+                        className={`data-item ${isWorker ? 'usuario-clickeable' : ''} ${activeUsuarioId === usuario.id ? 'activo' : ''}`}
                         onClick={(e) => {
+                          if (!isWorker) return
                           if (e.target.closest('.action-buttons')) return
-                          setActiveUsuarioId(uid)
+                          setActiveUsuarioId(usuario.id)
                           setAsignacionesOpen(true)
                           setTimeout(() => document.getElementById('asignaciones-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
                         }}
                       >
-                        <td data-field="nombre">{u.nombre}</td>
-                        <td data-field="email">{u.email}</td>
-                        <td data-field="password">{u.pass}</td>
-                        <td data-field="rol">{u.rol}</td>
+                        <td data-field="nombre">{`${usuario.nombre} ${usuario.apellidos || ''}`.trim()}</td>
+                        <td data-field="email">{usuario.email}</td>
+                        <td data-field="password">{usuario.password}</td>
+                        <td data-field="rol">{usuario.rol}</td>
                         <td data-field="acciones">
                           <div className="action-buttons">
-                            <button type="button" className="btn-icon btn-edit" title="Editar">
+                            <button
+                              type="button"
+                              className="btn-icon btn-edit"
+                              title="Editar"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleOpenEditUser(usuario)
+                              }}
+                            >
                               ✏️
                             </button>
-                            <button type="button" className="btn-icon btn-delete" title="Eliminar">
+                            <button
+                              type="button"
+                              className="btn-icon btn-delete"
+                              title="Eliminar"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeleteUser(usuario.id)
+                              }}
+                            >
                               🗑️
                             </button>
                           </div>
@@ -1012,13 +1352,7 @@ export default function AdminPanel() {
                 <h3>
                   Asignaciones de{' '}
                   <span id="usuario-nombre-asignaciones">
-                    {activeUsuarioId === 2
-                      ? 'Carlos Mendez Rivas'
-                      : activeUsuarioId === 3
-                        ? 'María Gonzalez Ortiz'
-                        : activeUsuarioId === 4
-                          ? 'Juan Pablo Silva Flores'
-                          : '--'}
+                    {users.find((u) => u.id === activeUsuarioId)?.nombre || '--'}
                   </span>
                 </h3>
                 <button
@@ -1045,18 +1379,27 @@ export default function AdminPanel() {
                     </tr>
                   </thead>
                   <tbody id="asignaciones-tbody">
-                    {(ASIGNACIONES_BY_USUARIO[activeUsuarioId] || []).map((a, i) => (
-                      <tr key={i} className="data-item">
-                        <td data-field="finca">{a.finca}</td>
-                        <td data-field="cultivos">{a.cultivos}</td>
+                    {activeUsuarioAssignments.length > 0 ? (
+                      activeUsuarioAssignments.map((a, i) => (
+                        <tr key={i} className="data-item">
+                          <td data-field="finca">{a.finca}</td>
+                          <td data-field="cultivos">{a.cultivos}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="data-item">
+                        <td colSpan={2} style={{ textAlign: 'center', color: '#666' }}>
+                          No hay asignaciones registradas para este trabajador.
+                        </td>
                       </tr>
-                    ))}
+                    )}
                   </tbody>
                 </table>
               </div>
             </div>
           </section>
 
+          {/* Sección de cultivos: lista por finca y acceso a detalles individuales. */}
           <section id="cultivos-section" className={`content-section ${activeSection === 'cultivos' ? 'active' : ''}`}>
             <div className="section-header">
               <input type="text" className="search-input" placeholder="🔍 Buscar por nombre..." readOnly />
@@ -1091,40 +1434,51 @@ export default function AdminPanel() {
                   </tr>
                 </thead>
                 <tbody>
-                  {cultivosEnFinca.map((c) => (
-                    <tr
-                      key={c.id}
-                      className="data-item"
-                      style={{ cursor: 'pointer' }}
-                      onClick={(e) => {
-                        if (e.target.closest('.action-buttons')) return
-                        openCultivoDetalle(c)
-                      }}
-                    >
-                      <td data-field="nombre">{c.nombre}</td>
-                      <td data-field="tipo">{c.tipo}</td>
-                      <td data-field="fecha-siembra">{c.fechaInicio}</td>
-                      <td data-field="fecha-cosecha">{c.fechaCosecha || '--'}</td>
-                      <td data-field="estado">
-                        <span className={`status-badge status-${c.estado}`}>{c.estado.replace('-', ' ')}</span>
-                      </td>
-                      <td data-field="acciones">
-                        <div className="action-buttons">
-                          <button type="button" className="btn-icon btn-edit" title="Editar">
-                            ✏️
-                          </button>
-                          <button type="button" className="btn-icon btn-delete" title="Eliminar">
-                            🗑️
-                          </button>
-                        </div>
+                  {cultivos && cultivos.length > 0 ? (
+                    cultivos.map((c) => (
+                      <tr
+                        key={c.id}
+                        className="data-item"
+                        style={{ cursor: 'pointer' }}
+                        onClick={(e) => {
+                          if (e.target.closest('.action-buttons')) return
+                          openCultivoDetalle(c)
+                        }}
+                      >
+                        <td data-field="nombre">{c.nombre}</td>
+                        <td data-field="tipo">{c.tipo || '--'}</td>
+                        <td data-field="fecha-siembra">{c.fechaInicio || '--'}</td>
+                        <td data-field="fecha-cosecha">{c.fechaCosecha || '--'}</td>
+                        <td data-field="estado">
+                          <span className={`status-badge status-${c.estado?.toLowerCase().replace(/\s+/g, '-') || 'desconocido'}`}>
+                            {c.estado || '--'}
+                          </span>
+                        </td>
+                        <td data-field="acciones">
+                          <div className="action-buttons">
+                            <button type="button" className="btn-icon btn-edit" title="Editar">
+                              ✏️
+                            </button>
+                            <button type="button" className="btn-icon btn-delete" title="Eliminar">
+                              🗑️
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr className="data-item">
+                      <td colSpan={6} style={{ textAlign: 'center', color: '#666' }}>
+                        No hay cultivos registrados en esta finca
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
           </section>
 
+          {/* Sección de detalle de cultivo con etapas, cosechas y costos asociados. */}
           <section id="detalle-cultivo-section" className={`content-section ${activeSection === 'detalle-cultivo' ? 'active' : ''}`}>
             <div className="section-header">
               <button type="button" className="btn-back" id="btn-back-cultivos" onClick={backToCultivos}>
@@ -1404,6 +1758,7 @@ export default function AdminPanel() {
             ) : null}
           </section>
 
+          {/* Sección de reportes: filtros, selección de tipo y exportación. */}
           <section id="reportes-section" className={`content-section ${activeSection === 'reportes' ? 'active' : ''}`}>
             <div className="reportes-container">
               <div className="reportes-header">
@@ -1529,6 +1884,7 @@ export default function AdminPanel() {
             </div>
           </section>
 
+          {/* Sección de costos generales: lista de costos y detalle de inventario. */}
           <section id="costos-section" className={`content-section ${activeSection === 'costos' ? 'active' : ''}`}>
             <div className="search-filter-wrapper">
               <div className="filter-wrapper">
@@ -1653,6 +2009,7 @@ export default function AdminPanel() {
             </div>
           </section>
 
+          {/* Sección de rentabilidad: gráficos comparativos y tabla de márgenes. */}
           <section id="rentabilidad-section" className={`content-section ${activeSection === 'rentabilidad' ? 'active' : ''}`}>
             <div className="section-header">
               <h2>Análisis de Rentabilidad</h2>
@@ -1689,7 +2046,7 @@ export default function AdminPanel() {
                       <td>{Agro.formatCOP(r.ingresos)}</td>
                       <td>{Agro.formatCOP(r.costos)}</td>
                       <td>{Agro.formatCOP(r.ganancia)}</td>
-                      <td>{r.margen.toFixed(1)}%</td>
+                      <td>{Number(r.margen || 0).toFixed(1)}%</td>
                     </tr>
                   ))}
                 </tbody>

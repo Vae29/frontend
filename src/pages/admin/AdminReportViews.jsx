@@ -219,7 +219,7 @@ export function AdminReportTable({ fincaId, reportType }) {
           </div>
           <div className="resumen-item">
             <label>Margen Promedio</label>
-            <div className="valor">{margenProm.toFixed(1)}%</div>
+            <div className="valor">{Number(margenProm || 0).toFixed(1)}%</div>
           </div>
           <div className="resumen-item">
             <label>Cultivo Más Rentable</label>
@@ -243,7 +243,7 @@ export function AdminReportTable({ fincaId, reportType }) {
                 <td>{Agro.formatCOP(r.ingresos)}</td>
                 <td>{Agro.formatCOP(r.costos)}</td>
                 <td>{Agro.formatCOP(r.ganancia)}</td>
-                <td>{r.margen.toFixed(1)}%</td>
+                <td>{Number(r.margen || 0).toFixed(1)}%</td>
               </tr>
             ))}
           </tbody>

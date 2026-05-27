@@ -4,11 +4,12 @@ import { getModalConfig, validateForm, validateField } from '../utils/modalConfi
 /**
  * Componente de modal dinámico que cambia su contenido según el tipo
  */
-export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, fieldOptions = {}, initialData = {}, onFieldChange }) {
+export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, submitButtonText, fieldOptions = {}, initialData = undefined, onFieldChange }) {
   const [formData, setFormData] = useState({})
   const [errors, setErrors] = useState({})
   const [focusedField, setFocusedField] = useState(null)
   const [showPassword, setShowPassword] = useState({})
+  const [filterQueries, setFilterQueries] = useState({})
 
   const config = getModalConfig(modalType)
 
@@ -17,22 +18,27 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, fiel
     if (isOpen && modalType) {
       const init = {}
       config.fields.forEach((field) => {
-        init[field.name] = field.defaultValue || ''
+        init[field.name] = field.multiple ? field.defaultValue || [] : field.defaultValue || ''
       })
       // merge provided initialData (from parent) on top of defaults
       setFormData({ ...init, ...(initialData || {}) })
       setErrors({})
       setFocusedField(null)
+      setFilterQueries({})
     }
   }, [isOpen, modalType, initialData])
 
   const handleInputChange = (e) => {
-    const { name, value } = e.target
+    const { name, value, type, multiple, options } = e.target
+    const nextValue = multiple
+      ? Array.from(options).filter((option) => option.selected).map((option) => option.value)
+      : value
+
     setFormData((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: nextValue,
     }))
-    if (typeof onFieldChange === 'function') onFieldChange(name, value)
+    if (typeof onFieldChange === 'function') onFieldChange(name, nextValue)
     // Limpiar error del campo cuando el usuario empieza a escribir
     if (errors[name]) {
       setErrors((prev) => ({
@@ -40,6 +46,31 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, fiel
         [name]: '',
       }))
     }
+  }
+
+  const handleCheckboxChange = (fieldName, optionValue, checked) => {
+    setFormData((prev) => {
+      const currentValue = Array.isArray(prev[fieldName]) ? prev[fieldName] : []
+      const nextValue = checked
+        ? [...currentValue, optionValue]
+        : currentValue.filter((value) => value !== optionValue)
+
+      if (typeof onFieldChange === 'function') {
+        onFieldChange(fieldName, nextValue)
+      }
+
+      if (errors[fieldName]) {
+        setErrors((prevErrors) => ({
+          ...prevErrors,
+          [fieldName]: '',
+        }))
+      }
+
+      return {
+        ...prev,
+        [fieldName]: nextValue,
+      }
+    })
   }
 
   const handleSubmit = (e) => {
@@ -119,8 +150,14 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, fiel
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 999,
+        pointerEvents: 'auto',
       }}
-      onClick={handleCancel}
+      onMouseDown={(e) => {
+        // Close only when clicking directly on the overlay (outside modal content)
+        if (e.target === e.currentTarget) {
+          handleCancel()
+        }
+      }}
     >
       <div
         className="modal-content"
@@ -133,8 +170,12 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, fiel
           boxShadow: '0 10px 40px rgba(0, 0, 0, 0.2)',
           maxHeight: '90vh',
           overflowY: 'auto',
+          pointerEvents: 'auto',
         }}
         onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
       >
         <h2
           style={{
@@ -161,10 +202,113 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, fiel
                 {field.required && <span style={{ color: '#e74c3c' }}> *</span>}
               </label>
 
-              {field.type === 'select' ? (
+              {field.type === 'multiselect-search' ? (
+                <>
+                  <input
+                    type="text"
+                    value={filterQueries[field.name] || ''}
+                    placeholder={field.searchPlaceholder || `Buscar ${field.label}`}
+                    onChange={(e) =>
+                      setFilterQueries((prev) => ({
+                        ...prev,
+                        [field.name]: e.target.value,
+                      }))
+                    }
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      marginBottom: '10px',
+                      border: `2px solid ${errors[field.name] ? '#e74c3c' : '#e8e8e8'}`,
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      fontFamily: "var(--font-cuerpo, 'Poppins')",
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                  <div
+                    style={{
+                      height: '240px',
+                      overflowY: 'auto',
+                      padding: '10px',
+                      border: `2px solid ${errors[field.name] ? '#e74c3c' : '#e8e8e8'}`,
+                      borderRadius: '8px',
+                      backgroundColor: '#fff',
+                    }}
+                  >
+                    {(fieldOptions[field.name] || field.options || [])
+                      .filter((option) => {
+                        const query = (filterQueries[field.name] || '').trim().toLowerCase()
+                        if (!query) return true
+                        return (
+                          (option.label || '')
+                            .toString()
+                            .toLowerCase()
+                            .includes(query) ||
+                          (option.description || '')
+                            .toString()
+                            .toLowerCase()
+                            .includes(query)
+                        )
+                      })
+                      .map((option) => {
+                        const optionValue = option.value || option
+                        const selectedValues = Array.isArray(formData[field.name]) ? formData[field.name] : []
+                        const isChecked = selectedValues.includes(optionValue)
+                        return (
+                          <label
+                            key={optionValue}
+                            style={{
+                              display: 'block',
+                              marginBottom: '10px',
+                              cursor: 'pointer',
+                              padding: '8px',
+                              borderRadius: '8px',
+                              backgroundColor: isChecked ? '#f4faf0' : 'transparent',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => handleCheckboxChange(field.name, optionValue, e.target.checked)}
+                                style={{ marginTop: '3px' }}
+                              />
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 500, color: '#5a5a5a' }}>{option.label || optionValue}</div>
+                                {option.description && (
+                                  <div style={{ fontSize: '12px', color: '#8a8a8a', marginTop: '4px' }}>
+                                    {option.description}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </label>
+                        )
+                      })}
+                    {(fieldOptions[field.name] || field.options || []).filter((option) => {
+                      const query = (filterQueries[field.name] || '').trim().toLowerCase()
+                      if (!query) return true
+                      return (
+                        (option.label || '')
+                          .toString()
+                          .toLowerCase()
+                          .includes(query) ||
+                        (option.description || '')
+                          .toString()
+                          .toLowerCase()
+                          .includes(query)
+                      )
+                    }).length === 0 && (
+                      <p style={{ color: '#777', margin: '0' }}>No se encontraron opciones.</p>
+                    )}
+                  </div>
+                </>
+              ) : field.type === 'select' ? (
                 <select
                   name={field.name}
-                  value={formData[field.name] || ''}
+                  value={field.multiple ? formData[field.name] || [] : formData[field.name] || ''}
+                  multiple={field.multiple}
+                  size={field.multiple ? Math.min(6, (fieldOptions[field.name] || field.options || []).length || 3) : undefined}
                   onChange={handleInputChange}
                   onFocus={() => setFocusedField(field.name)}
                   onBlur={() => setFocusedField(null)}
@@ -179,6 +323,7 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, fiel
                     transition: 'all 0.3s ease',
                     backgroundColor: 'white',
                     cursor: 'pointer',
+                    minHeight: field.multiple ? '120px' : undefined,
                   }}
                   onMouseEnter={(e) => {
                     if (!errors[field.name] && focusedField !== field.name) {
@@ -191,7 +336,7 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, fiel
                     }
                   }}
                 >
-                  <option value="">Seleccionar {field.label}</option>
+                  {!field.multiple && <option value="">Seleccionar {field.label}</option>}
                   {(fieldOptions[field.name] || field.options || []).map((option) => (
                     <option key={option.value || option} value={option.value || option}>
                       {option.label || option}
@@ -371,7 +516,7 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, fiel
                 e.target.style.backgroundColor = 'var(--color-verde-oscuro)'
               }}
             >
-              {config.submitButtonText}
+              {submitButtonText || config.submitButtonText}
             </button>
           </div>
         </form>

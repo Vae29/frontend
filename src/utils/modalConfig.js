@@ -73,6 +73,22 @@ export const getModalConfig = (type) => {
           ],
           required: true,
         },
+        {
+          name: 'fincas',
+          label: 'Fincas Asignadas',
+          type: 'multiselect-search',
+          multiple: true,
+          required: false,
+          searchPlaceholder: 'Buscar finca...',
+        },
+        {
+          name: 'cultivos',
+          label: 'Cultivos Asignados',
+          type: 'multiselect-search',
+          multiple: true,
+          required: false,
+          searchPlaceholder: 'Buscar cultivo...',
+        },
       ],
     },
     [MODAL_TYPES.CULTIVO]: {

@@ -13,7 +13,7 @@ export async function fetchFincas(search = '') {
     params.search = search.trim();
   }
   const response = await apiClient.get('/fincas', { params });
-  return response.data;
+  return response.data?.data ?? response.data;
 }
 
 export async function createFinca({ nombre, ubicacion }) {

@@ -141,7 +141,7 @@ export function updateRentabilidadCharts(dashboardData, refs) {
         datasets: [
           {
             label: 'Margen de Rentabilidad (%)',
-            data: rows.map((r) => Number(r.margen.toFixed(1))),
+            data: rows.map((r) => Number((r.margen || 0).toFixed(1))),
             backgroundColor: ['#27ae60', '#f39c12', '#3498db', '#e74c3c', '#9b59b6'],
             borderRadius: 6,
           },
