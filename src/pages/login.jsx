@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as Agro from '../services/agroData'
 import { loginUser, requestPasswordReset, verifyResetCode } from '../services/authApi'
-import { setSession } from '../services/authSession'
+import { setSession, setAccessToken } from '../services/authSession'
 import '../styles/login.css'
 
 export default function Login() {
@@ -44,7 +44,7 @@ export default function Login() {
     const result = await loginUser(trimmedEmail.toLowerCase(), trimmedPassword)
 
     if (result.success) {
-      const { id, email: userEmail, nombre, role: rawRole } = result.data
+      const { id, email: userEmail, nombre, apellidos = '', role: rawRole, accessToken } = result.data
       const normalizedRole = String(rawRole || '')
         .trim()
         .toLowerCase()
@@ -61,7 +61,12 @@ export default function Login() {
           ? 'admin'
           : 'worker'
 
-      const sessionData = { id, email: userEmail, nombre, role }
+      // Guardar el access token en memoria
+      if (accessToken) {
+        setAccessToken(accessToken)
+      }
+
+      const sessionData = { id, email: userEmail, nombre, apellidos, role }
       if (role === 'worker') {
         const trabajador = Agro.getTrabajadorByEmail(userEmail)
         if (trabajador) {

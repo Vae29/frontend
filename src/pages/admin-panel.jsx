@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as Agro from '../services/agroData'
-import { clearSession, getSession } from '../services/authSession'
-import { fetchUsers, createUser, updateUser, deleteUser } from '../services/authApi'
+import { clearTokens, getSession } from '../services/authSession'
+import { logoutUser, fetchUsers, createUser, updateUser, deleteUser } from '../services/authApi'
 import { fetchCultivosEnProceso } from '../services/asignaciones-usuarioAPI'
 import { getInventarioElementos } from '../utils/inventarioElementos'
 import Header from '../components/Header'
@@ -91,6 +91,7 @@ export default function AdminPanel() {
   const navigate = useNavigate()
   // Sesión actual del usuario; se usa para validar rol de administrador.
   const session = getSession()
+  const accountFullName = [session?.nombre, session?.apellidos].filter(Boolean).join(' ') || session?.email || 'Cuenta'
 
   // Estado local del componente administrado por React.
   // fincaId guarda la finca seleccionada actualmente.
@@ -900,7 +901,11 @@ export default function AdminPanel() {
 
     if (!result.isConfirmed) return
 
-    clearSession()
+    // Llamar al endpoint de logout para cerrar sesión en el servidor
+    await logoutUser()
+
+    // Limpiar tokens en el cliente
+    clearTokens()
     navigate('/', { replace: true })
   }
 
@@ -1074,8 +1079,8 @@ export default function AdminPanel() {
         navItems={navItems}
         activeNavSection={activeSection === 'detalle-cultivo' ? null : activeSection}
         onNavClick={switchSection}
-        accountName="Admin"
-        accountEmail="admin123@gmail.com"
+        accountName={accountFullName}
+        accountEmail={session?.email || 'correo@agro.com'}
         onLogout={onLogout}
       />
 

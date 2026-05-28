@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { getSession } from './services/authSession'
 import Login from './pages/login'
@@ -35,29 +36,48 @@ function RequireWorker({ children }) {
   return children
 }
 
+function AppRoutes() {
+  useEffect(() => {
+    // Limpiar tokens cuando se cierre la pestaña
+    const handleBeforeUnload = (e) => {
+      // Al cerrar la pestaña, el access token en memoria se pierde automáticamente
+      // El refresh token en la cookie se pierde cuando el navegador se cierra (si sameSite=strict)
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
+  }, [])
+
+  return (
+    <Routes>
+      <Route path="/" element={<Login />} />
+      <Route
+        path="/admin"
+        element={
+          <RequireAdmin>
+            <AdminPanel />
+          </RequireAdmin>
+        }
+      />
+      <Route
+        path="/worker"
+        element={
+          <RequireWorker>
+            <WorkerPanel />
+          </RequireWorker>
+        }
+      />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  )
+}
+
 export default function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Login />} />
-        <Route
-          path="/admin"
-          element={
-            <RequireAdmin>
-              <AdminPanel />
-            </RequireAdmin>
-          }
-        />
-        <Route
-          path="/worker"
-          element={
-            <RequireWorker>
-              <WorkerPanel />
-            </RequireWorker>
-          }
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <AppRoutes />
     </BrowserRouter>
   )
 }

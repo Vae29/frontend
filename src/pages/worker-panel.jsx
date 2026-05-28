@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as Agro from '../services/agroData'
-import { clearSession, getSession } from '../services/authSession'
+import { clearTokens, getSession } from '../services/authSession'
+import { logoutUser } from '../services/authApi'
 import { getInventarioElementos } from '../utils/inventarioElementos'
 import Header from '../components/Header'
 import Sidebar from '../components/Sidebar'
@@ -50,7 +51,12 @@ export default function WorkerPanel() {
       if (foundByEmail) return foundByEmail
     }
 
-    return { id: session.id, nombre: session.nombre, email: session.email }
+    return {
+      id: session.id,
+      nombre: session.nombre,
+      apellidos: session.apellidos || '',
+      email: session.email,
+    }
   }, [session])
 
   const [activeSection, setActiveSection] = useState('inicio')
@@ -178,9 +184,13 @@ export default function WorkerPanel() {
     setPageTitle('Mis Cultivos')
   }
 
-  const onLogout = () => {
+  const onLogout = async () => {
     if (window.confirm('¿Estás seguro de que deseas cerrar sesión?')) {
-      clearSession()
+      // Llamar al endpoint de logout para cerrar sesión en el servidor
+      await logoutUser()
+
+      // Limpiar tokens en el cliente
+      clearTokens()
       navigate('/', { replace: true })
     }
   }
@@ -206,6 +216,8 @@ export default function WorkerPanel() {
     },
   ]
 
+  const workerFullName = [worker?.nombre, worker?.apellidos].filter(Boolean).join(' ') || worker?.email || 'Cuenta'
+
   if (!worker) {
     return null
   }
@@ -220,7 +232,7 @@ export default function WorkerPanel() {
         navItems={navItems}
         activeNavSection={activeSection === 'detalle-cultivo' ? null : activeSection}
         onNavClick={(sectionId) => switchSection(sectionId)}
-        accountName={worker.nombre}
+        accountName={workerFullName}
         accountEmail={worker.email}
         onLogout={onLogout}
       />
@@ -235,7 +247,7 @@ export default function WorkerPanel() {
         <div className="content-container">
           <section id="inicio-section" className={`content-section ${activeSection === 'inicio' ? 'active' : ''}`}>
             <div className="welcome-container">
-              <h2 id="welcomeMessage">¡Bienvenido, {worker.nombre}!</h2>
+              <h2 id="welcomeMessage">¡Bienvenido, {workerFullName}!</h2>
               <p className="welcome-subtitle">Estadísticas de tus cultivos</p>
             </div>
 
