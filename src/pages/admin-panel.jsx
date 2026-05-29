@@ -15,7 +15,7 @@ import '../styles/dashboard.css'
 import '../styles/admin-panel.css'
 import { fetchFincas, createFinca, updateFinca, deleteFinca } from '../services/fincaService'
 import { fetchDashboardForFinca } from '../services/dashboardService'
-import { fetchCultivosPorFinca } from '../services/cultivoService'
+import { fetchCultivosPorFinca, fetchTiposCultivo, fetchEstados, createCultivo, updateCultivo } from '../services/cultivoService'
 import * as reportService from '../services/reportService'
 
 import { MODAL_TYPES, DEPARTAMENTOS, MUNICIPIOS_POR_DEPARTAMENTO } from '../utils/modalConfig'
@@ -50,6 +50,20 @@ function etapaClassName(nombre) {
 function isValidFincaId(value) {
   const numberValue = Number(value)
   return Number.isInteger(numberValue) && numberValue > 0
+}
+
+function formatDateValue(value) {
+  if (!value) return '--'
+  const parsedDate = new Date(value)
+  if (Number.isNaN(parsedDate.getTime())) return value
+  return parsedDate.toISOString().slice(0, 10)
+}
+
+function formatDateForInput(value) {
+  if (!value) return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toISOString().slice(0, 10)
 }
 
 const COSTOS_GENERALES_ROWS = [
@@ -159,6 +173,7 @@ export default function AdminPanel() {
   const [cultivos, setCultivos] = useState([])
   const [isLoadingCultivos, setIsLoadingCultivos] = useState(false)
   const [editingFinca, setEditingFinca] = useState(null)
+  const [editingCultivo, setEditingCultivo] = useState(null)
 
   // Memoize initial data for DynamicModal to avoid recreating object each render
   const memoizedModalInitialData = useMemo(() => {
@@ -174,7 +189,7 @@ export default function AdminPanel() {
     }
   }, [editingUser])
 
-  const dynamicModalInitialData = editingFinca ? modalInitialData : memoizedModalInitialData
+  const dynamicModalInitialData = editingFinca || editingCultivo ? modalInitialData : memoizedModalInitialData
 
   // Refs para elementos DOM y gráficos.
   const reportRef = useRef(null)
@@ -428,6 +443,10 @@ export default function AdminPanel() {
 
   const handleOpenFincaModal = (finca = null) => {
     // prepare modal options and initial data
+    // clear other editors to avoid stale modal data
+    setEditingUser(null)
+    setEditingCultivo(null)
+
     const [editDepartamento, editMunicipio] = (() => {
       if (!finca?.ubicacion) return ['', '']
       const parts = finca.ubicacion.split(',')
@@ -450,6 +469,50 @@ export default function AdminPanel() {
 
     setDynamicModalType(MODAL_TYPES.FINCA)
     setShowDynamicModal(true)
+  }
+
+  const handleOpenEditCultivo = async (cultivo) => {
+    // Clear other editors and reset modal data
+    setEditingUser(null)
+    setEditingFinca(null)
+    setModalInitialData({})
+
+    setEditingCultivo(cultivo)
+    setDynamicModalType(MODAL_TYPES.CULTIVO)
+
+    setModalFieldOptions({ tipo: [], estado: [] })
+
+    try {
+      const [tiposResp, estadosResp] = await Promise.all([fetchTiposCultivo(), fetchEstados()])
+
+      const tiposArray = tiposResp?.success ? tiposResp.data : Array.isArray(tiposResp) ? tiposResp : tiposResp?.data || []
+      const estadosArray = estadosResp?.success ? estadosResp.data : Array.isArray(estadosResp) ? estadosResp : estadosResp?.data || []
+
+      setModalFieldOptions({
+        tipo: tiposArray.map((t) => ({ value: t.id, label: t.nombre })),
+        estado: estadosArray.map((s) => ({ value: s.id, label: s.nombre })),
+      })
+
+      setModalInitialData({
+        nombre: cultivo.nombre || '',
+        tipo: cultivo.idtipocultivo || cultivo.idtipocultivo || '',
+        fechaInicio: formatDateForInput(cultivo.fechaInicio || cultivo.fecha_inicio || cultivo.fechainicio),
+        estado: cultivo.idestado || '',
+      })
+    } catch (error) {
+      console.error('Error cargando datos para editar cultivo:', error)
+      showNotification('Error cargando datos del cultivo', 'error')
+    }
+
+    setShowDynamicModal(true)
+  }
+
+  const countCultivosActivosByFinca = (fincaId) => {
+    return cultivosData.filter((cultivo) => {
+      const belongsToFinca = String(cultivo.idfinca || cultivo.fincaId) === String(fincaId)
+      const isActivo = cultivo.idestado === 1 || (cultivo.estado && cultivo.estado.toLowerCase() !== 'finalizado')
+      return belongsToFinca && isActivo
+    }).length
   }
 
   const handleDeleteFinca = async (id) => {
@@ -543,7 +606,11 @@ export default function AdminPanel() {
 
   // Abre un modal dinámico de creación dependiendo del tipo seleccionado.
   const handleOpenDynamicModal = (type) => {
+    // Clear any previous editing state to avoid stale initial data
     setEditingUser(null)
+    setEditingFinca(null)
+    setEditingCultivo(null)
+    setModalInitialData({})
     setDynamicModalType(type)
 
     if (type === MODAL_TYPES.USUARIO) {
@@ -589,14 +656,54 @@ export default function AdminPanel() {
         }
       }
 
-      loadOptions()
+      ;(async () => {
+        await loadOptions()
+        setShowDynamicModal(true)
+      })()
     }
 
-    setShowDynamicModal(true)
+    if (type === MODAL_TYPES.CULTIVO) {
+      setModalFieldOptions({ tipo: [] })
+
+      const loadTipos = async () => {
+        try {
+          const tiposResponse = await fetchTiposCultivo()
+          const tiposArray = tiposResponse?.success
+            ? tiposResponse.data
+            : Array.isArray(tiposResponse)
+            ? tiposResponse
+            : tiposResponse?.data || []
+
+          setModalFieldOptions({
+            tipo: tiposArray.map((tipo) => ({ value: tipo.id, label: tipo.nombre })),
+          })
+
+          if (!tiposArray || tiposArray.length === 0) {
+            console.warn('No tipos de cultivo cargados')
+          }
+        } catch (error) {
+          console.error('Error cargando tipos de cultivo:', error)
+          showNotification('Error cargando tipos de cultivo', 'error')
+        }
+      }
+
+      ;(async () => {
+        await loadTipos()
+        // Siempre abrir el modal después de intentar cargar tipos
+        setShowDynamicModal(true)
+      })()
+    }
+
+    // for other types, open modal immediately
+    if (type !== MODAL_TYPES.USUARIO && type !== MODAL_TYPES.CULTIVO) setShowDynamicModal(true)
   }
 
   // Abre el modal para editar un usuario existente sin diálogo extra.
   const handleOpenEditUser = (usuario) => {
+    // Clear other editors and reset modal data to ensure fresh state
+    setEditingFinca(null)
+    setEditingCultivo(null)
+    setModalInitialData({})
     setEditingUser(usuario)
     setDynamicModalType(MODAL_TYPES.USUARIO)
 
@@ -640,8 +747,10 @@ export default function AdminPanel() {
       }
     }
 
-    loadOptions()
-    setShowDynamicModal(true)
+    ;(async () => {
+      await loadOptions()
+      setShowDynamicModal(true)
+    })()
   }
 
   // Cierra el modal dinámico y limpia el estado asociado.
@@ -650,6 +759,7 @@ export default function AdminPanel() {
     setDynamicModalType(null)
     setEditingUser(null)
     setModalFieldOptions({})
+    setEditingCultivo(null)
   }
 
   // Elimina un usuario después de pedir confirmación.
@@ -733,10 +843,76 @@ export default function AdminPanel() {
         }
         break
       }
-      case MODAL_TYPES.CULTIVO:
-        // Solo muestra mensaje; no hay implementación real de creación de cultivo aquí.
-        successMessage = `Cultivo "${formData.nombre}" agregado exitosamente`
+      case MODAL_TYPES.CULTIVO: {
+        const nombre = formData.nombre?.trim()
+        const idtipocultivo = Number(formData.tipo)
+        const idfinca = Number(fincaId)
+        const idestado = editingCultivo && formData.estado ? Number(formData.estado) : null
+        const fechaInicio = formData.fechaInicio || null
+
+        // Para crear: nombre y tipo son suficientes. Para editar: también requiere estado
+        if (!nombre || !idtipocultivo) {
+          showNotification('Por favor completa el nombre y tipo del cultivo', 'error')
+          return
+        }
+
+        if (!idfinca || idfinca <= 0) {
+          showNotification('Debe seleccionar una finca antes de agregar un cultivo', 'error')
+          return
+        }
+
+        if (editingCultivo && !idestado) {
+          showNotification('Por favor selecciona un estado para actualizar el cultivo', 'error')
+          return
+        }
+
+        try {
+          if (editingCultivo) {
+            // Actualizar cultivo existente
+            const resp = await updateCultivo(editingCultivo.id, {
+              nombre,
+              idtipocultivo,
+              idestado,
+              fecha_inicio: fechaInicio,
+            })
+
+            if (!resp || resp.success === false) {
+              const msg = resp?.message || 'Error actualizando el cultivo'
+              showNotification(msg, 'error')
+              return
+            }
+
+            successMessage = `Cultivo "${nombre}" actualizado exitosamente`
+            setEditingCultivo(null)
+          } else {
+            // Crear nuevo cultivo
+            const resp = await createCultivo({ nombre, idtipocultivo, idfinca })
+            if (!resp || resp.success === false) {
+              const msg = resp?.message || 'Error creando el cultivo'
+              showNotification(msg, 'error')
+              return
+            }
+            successMessage = `Cultivo "${nombre}" agregado exitosamente`
+          }
+
+          // Recargar cultivos de la finca actual y actualizar el conteo de cultivos activos.
+          await fetchCultivosData(String(idfinca))
+          const cultivosResponse = await fetchCultivosEnProceso()
+          const cultivosArray = cultivosResponse?.success
+            ? cultivosResponse.data
+            : Array.isArray(cultivosResponse)
+            ? cultivosResponse
+            : cultivosResponse?.data || []
+
+          setCultivosData(cultivosArray)
+        } catch (error) {
+          console.error('Error guardando/actualizando cultivo:', error)
+          const message = error?.response?.data?.message || error?.response?.data?.error || 'Error guardando el cultivo'
+          showNotification(message, 'error')
+          return
+        }
         break
+      }
       case MODAL_TYPES.COSTO:
         // Solo muestra mensaje; no hay implementación real de creación de costo aquí.
         successMessage = `Costo de ${formData.categoria} agregado exitosamente`
@@ -1030,9 +1206,12 @@ export default function AdminPanel() {
   }
 
   const cultivosEstadoCards = cultivosEnFinca.map((c) => {
-    const badgeClass = c.estado?.toLowerCase() === 'finalizado' ? 'completed' : 'active'
+    const estadoLower = (c.estado || '').toLowerCase()
+    let badgeClass = 'active'
+    if (estadoLower === 'finalizado') badgeClass = 'completed'
+    if (estadoLower === 'perdido') badgeClass = 'lost'
 
-    const badgeText = badgeClass === 'completed' ? 'Finalizado' : 'Activo'
+    const badgeText = estadoLower === 'finalizado' ? 'Finalizado' : estadoLower === 'perdido' ? 'Perdido' : 'Activo'
 
     return (
       <div key={c.id} className="cultivo-card">
@@ -1064,10 +1243,21 @@ export default function AdminPanel() {
       <DynamicModal
         isOpen={showDynamicModal}
         modalType={dynamicModalType}
+        isEditing={Boolean(editingUser || editingFinca || editingCultivo)}
         onClose={handleCloseDynamicModal}
         onSubmit={handleSubmitDynamicModal}
-        title={editingFinca ? 'Editar Finca' : editingUser ? 'Editar Usuario' : undefined}
-        submitButtonText={editingFinca ? 'Actualizar Finca' : editingUser ? 'Actualizar Usuario' : undefined}
+        title={
+          editingFinca ? 'Editar Finca' :
+          editingCultivo ? 'Editar Cultivo' :
+          editingUser ? 'Editar Usuario' :
+          undefined
+        }
+        submitButtonText={
+          editingFinca ? 'Actualizar Finca' :
+          editingCultivo ? 'Actualizar Cultivo' :
+          editingUser ? 'Actualizar Usuario' :
+          undefined
+        }
         fieldOptions={modalFieldOptions}
         initialData={dynamicModalInitialData}
         onFieldChange={(name, value) => {
@@ -1310,9 +1500,7 @@ export default function AdminPanel() {
                     </tr>
                   ) : (
                     fincas.map((finca) => {
-                      const cultivosActivos = Agro.cultivos.filter(
-                        (c) => String(c.fincaId) === String(finca.id) && c.estado !== 'finalizado' && c.estado !== 'perdido'
-                      ).length
+                      const cultivosActivos = countCultivosActivosByFinca(finca.id)
                       return (
                         <tr key={finca.id} className="data-item">
                           <td data-field="nombre">{finca.nombre}</td>
@@ -1499,7 +1687,7 @@ export default function AdminPanel() {
           {/* Sección de cultivos: lista por finca y acceso a detalles individuales. */}
           <section id="cultivos-section" className={`content-section ${activeSection === 'cultivos' ? 'active' : ''}`}>
             <div className="section-header">
-              <input type="text" className="search-input" placeholder="🔍 Buscar por nombre..." readOnly />
+              <input type="text" className="search-input" placeholder="Buscar por nombre..." readOnly />
               <div className="filter-wrapper">
                 <label className="filter-label">Filtrar por estado:</label>
                 <select className="filter-select" defaultValue="todos">
@@ -1544,16 +1732,33 @@ export default function AdminPanel() {
                       >
                         <td data-field="nombre">{c.nombre}</td>
                         <td data-field="tipo">{c.tipo || '--'}</td>
-                        <td data-field="fecha-siembra">{c.fechaInicio || c.fecha_inicio || '--'}</td>
-                        <td data-field="fecha-cosecha">{c.fechaCosecha || '--'}</td>
+                        <td data-field="fecha-siembra">{formatDateValue(c.fechaInicio || c.fecha_inicio || c.fechainicio)}</td>
+                        <td data-field="fecha-cosecha">{formatDateValue(c.fechaCosecha || c.fecha_cosecha || c.fechacosecha)}</td>
                         <td data-field="estado">
-                          <span className={`status-badge status-${c.estado?.toLowerCase().replace(/\s+/g, '-') || 'desconocido'}`}>
-                            {c.estado || '--'}
-                          </span>
+                          {
+                            (() => {
+                              const estadoLower = (c.estado || '').toLowerCase()
+                              const className = `status-badge status-${estadoLower.replace(/\s+/g, '-') || 'desconocido'}`
+                              const style = estadoLower === 'perdido' ? { backgroundColor: '#c0392b', color: '#fff' } : undefined
+                              return (
+                                <span className={className} style={style}>
+                                  {c.estado || '--'}
+                                </span>
+                              )
+                            })()
+                          }
                         </td>
                         <td data-field="acciones">
                           <div className="action-buttons">
-                            <button type="button" className="btn-icon btn-edit" title="Editar">
+                            <button
+                              type="button"
+                              className="btn-icon btn-edit"
+                              title="Editar"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleOpenEditCultivo(c)
+                              }}
+                            >
                               ✏️
                             </button>
                             <button type="button" className="btn-icon btn-delete" title="Eliminar">
@@ -1602,7 +1807,7 @@ export default function AdminPanel() {
                   </div>
                   <div className="search-filter-wrapper">
                     <div className="search-wrapper">
-                      <input type="text" className="search-input" placeholder="🔍 Buscar por nombre..." readOnly />
+                      <input type="text" className="search-input" placeholder="Buscar por nombre..." readOnly />
                       <button type="button" className="btn-search">
                         Buscar
                       </button>

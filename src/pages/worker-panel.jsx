@@ -340,7 +340,7 @@ export default function WorkerPanel() {
           <section id="cultivos-section" className={`content-section ${activeSection === 'cultivos' ? 'active' : ''}`}>
             <div className="section-header">
               <div className="search-wrapper">
-                <input type="text" className="search-input" placeholder="🔍 Buscar por nombre..." readOnly />
+                <input type="text" className="search-input" placeholder="Buscar por nombre..." readOnly />
                 <button type="button" className="btn-search">
                   Buscar
                 </button>
@@ -430,7 +430,7 @@ export default function WorkerPanel() {
                   </div>
                   <div className="search-filter-wrapper">
                     <div className="search-wrapper">
-                      <input type="text" className="search-input" placeholder="🔍 Buscar por nombre..." readOnly />
+                      <input type="text" className="search-input" placeholder="Buscar por nombre..." readOnly />
                       <button type="button" className="btn-search">
                         Buscar
                       </button>

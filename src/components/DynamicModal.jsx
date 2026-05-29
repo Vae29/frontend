@@ -4,7 +4,7 @@ import { getModalConfig, validateForm, validateField } from '../utils/modalConfi
 /**
  * Componente de modal dinámico que cambia su contenido según el tipo
  */
-export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, submitButtonText, fieldOptions = {}, initialData = undefined, onFieldChange }) {
+export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, submitButtonText, fieldOptions = {}, initialData = undefined, onFieldChange, isEditing = false }) {
   const [formData, setFormData] = useState({})
   const [errors, setErrors] = useState({})
   const [focusedField, setFocusedField] = useState(null)
@@ -188,7 +188,13 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
         </h2>
 
         <form onSubmit={handleSubmit}>
-          {config.fields.map((field) => (
+          {config.fields
+            .filter((field) => {
+              // hide fields meant only for editing when creating
+              if (field.editOnly && !isEditing) return false
+              return true
+            })
+            .map((field) => (
             <div key={field.name} style={{ marginBottom: '20px' }}>
               <label
                 style={{
