@@ -73,6 +73,14 @@ export default function Login() {
           sessionData.workerKey = trabajador.key
         }
       }
+
+      // Establecer sección principal al iniciar sesión
+      if (role === 'admin') {
+        localStorage.setItem('activeSection', 'dashboard')
+      } else {
+        localStorage.setItem('workerActiveSection', 'inicio')
+      }
+
       setSession(sessionData)
       navigate(role === 'admin' ? '/admin' : '/worker', { replace: true })
     } else {

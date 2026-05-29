@@ -1,4 +1,7 @@
+import axios from 'axios';
 import httpClient from './httpClient.js';
+
+const API_URL = 'http://localhost:3000';
 
 export async function loginUser(email, password) {
   try {
@@ -36,6 +39,29 @@ export async function logoutUser() {
     return {
       success: false,
       message: 'Error al cerrar sesión',
+    };
+  }
+}
+
+export async function refreshSession() {
+  try {
+    const response = await httpClient.post('/auth/refresh', {})
+
+    if (response.data.success && response.data.data) {
+      return {
+        success: true,
+        data: response.data.data,
+      };
+    }
+
+    return {
+      success: false,
+      message: response.data.message || 'Error al renovar la sesión',
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: error.response?.data?.message || 'Error de conexión con el servidor',
     };
   }
 }

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as Agro from '../services/agroData'
-import { clearTokens, getSession } from '../services/authSession'
+import { clearTokens } from '../services/authSession'
+import useAuthSession from '../hooks/useAuthSession'
 import { logoutUser, fetchUsers, createUser, updateUser, deleteUser } from '../services/authApi'
 import { fetchCultivosEnProceso } from '../services/asignaciones-usuarioAPI'
 import { getInventarioElementos } from '../utils/inventarioElementos'
@@ -90,7 +91,7 @@ export default function AdminPanel() {
   // Hook para cambiar de ruta cuando el usuario no tiene permiso o cierra sesión.
   const navigate = useNavigate()
   // Sesión actual del usuario; se usa para validar rol de administrador.
-  const session = getSession()
+  const session = useAuthSession()
   const accountFullName = [session?.nombre, session?.apellidos].filter(Boolean).join(' ') || session?.email || 'Cuenta'
 
   // Estado local del componente administrado por React.
@@ -100,14 +101,12 @@ export default function AdminPanel() {
     return isValidFincaId(initial) ? String(initial) : ''
   })
   const [activeSection, setActiveSection] = useState(() => {
-    const s = localStorage.getItem('activeSection') || 'dashboard'
-    if (s === 'detalle-cultivo') return 'cultivos'
-    return s
+    return localStorage.getItem('activeSection') || 'dashboard'
   })
   // Título que se muestra en la cabecera según la sección activa.
   const [pageTitle, setPageTitle] = useState(() => {
-    const normalized = 'dashboard'
-    return SECTION_TITLES[normalized] || 'Dashboard'
+    const initial = localStorage.getItem('activeSection') || 'dashboard'
+    return SECTION_TITLES[initial] || 'Dashboard'
   })
   const [selectedCultivoId, setSelectedCultivoId] = useState(null)
   // El usuario seleccionado para ver asignaciones de fincas/cultivos.
@@ -364,7 +363,8 @@ export default function AdminPanel() {
   }, [fincaId, fincasRefresh, fetchCultivosData])
 
   const handleBuscarFincas = () => {
-    fetchFincasList(searchTerm)
+    setSearchTerm('')
+    fetchFincasList('')
   }
 
   const buildFiltersObject = () => ({
@@ -896,13 +896,17 @@ export default function AdminPanel() {
     return () => window.removeEventListener('agro:fincaChanged', handler)
   }, [activeSection, dashboardData, reportVisible, reportType])
 
+  useEffect(() => {
+    localStorage.setItem('activeSection', activeSection)
+    setPageTitle(SECTION_TITLES[activeSection] || 'Dashboard')
+  }, [activeSection])
+
   // Cambia la sección activa del panel y guarda la selección en localStorage.
   const switchSection = (sectionId) => {
     if (sectionId !== 'detalle-cultivo') {
       setSelectedCultivoId(null)
     }
     setActiveSection(sectionId)
-    setPageTitle(SECTION_TITLES[sectionId] || 'Dashboard')
   }
 
   // Cambia la finca seleccionada y notifica al usuario.
@@ -1266,12 +1270,12 @@ export default function AdminPanel() {
                 <input
                   type="text"
                   className="search-input"
-                  placeholder="🔍 Buscar por nombre..."
+                  placeholder="Buscar por nombre..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
                 <button type="button" className="btn-search" onClick={handleBuscarFincas}>
-                  Buscar
+                  Limpiar
                 </button>
               </div>
               <button type="button" className="btn-add btn-primary" onClick={() => handleOpenFincaModal()}>
@@ -1429,6 +1433,13 @@ export default function AdminPanel() {
                       </tr>
                     )
                   })}
+                  {filteredUsers.length === 0 && filtroUsuario.trim().length > 0 && (
+                    <tr>
+                      <td colSpan={5} className="no-results-row">
+                        Usuario no encontrado
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1533,7 +1544,7 @@ export default function AdminPanel() {
                       >
                         <td data-field="nombre">{c.nombre}</td>
                         <td data-field="tipo">{c.tipo || '--'}</td>
-                        <td data-field="fecha-siembra">{c.fechaInicio || '--'}</td>
+                        <td data-field="fecha-siembra">{c.fechaInicio || c.fecha_inicio || '--'}</td>
                         <td data-field="fecha-cosecha">{c.fechaCosecha || '--'}</td>
                         <td data-field="estado">
                           <span className={`status-badge status-${c.estado?.toLowerCase().replace(/\s+/g, '-') || 'desconocido'}`}>

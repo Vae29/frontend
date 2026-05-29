@@ -1,6 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { getSession } from './services/authSession'
+import { getSession, setAccessToken, setSession, clearTokens } from './services/authSession'
+import { refreshSession } from './services/authApi'
+import useAuthSession from './hooks/useAuthSession'
 import Login from './pages/login'
 import AdminPanel from './pages/admin-panel'
 import WorkerPanel from './pages/worker-panel'
@@ -21,16 +23,22 @@ function normalizeRole(role) {
 }
 
 function RequireAdmin({ children }) {
-  const s = getSession()
-  if (!s || normalizeRole(s.role) !== 'admin') {
+  const s = useAuthSession()
+  if (!s) {
+    return <Navigate to="/" replace />
+  }
+  if (normalizeRole(s.role) !== 'admin') {
     return <Navigate to="/" replace />
   }
   return children
 }
 
 function RequireWorker({ children }) {
-  const s = getSession()
-  if (!s || normalizeRole(s.role) !== 'worker') {
+  const s = useAuthSession()
+  if (!s) {
+    return <Navigate to="/" replace />
+  }
+  if (normalizeRole(s.role) !== 'worker') {
     return <Navigate to="/" replace />
   }
   return children
@@ -75,6 +83,46 @@ function AppRoutes() {
 }
 
 export default function App() {
+  const [loadingSession, setLoadingSession] = useState(true)
+
+  useEffect(() => {
+    let timeoutId = null
+    
+    async function initializeSession() {
+      try {
+        const current = getSession()
+        if (current) {
+          setSession(current)
+        }
+
+        const result = await refreshSession()
+        if (result.success && result.data) {
+          const { id, email, nombre, apellidos = '', role, accessToken } = result.data
+          setAccessToken(accessToken)
+          setSession({ id, email, nombre, apellidos, role })
+        } else {
+          clearTokens()
+        }
+      } catch (error) {
+        clearTokens()
+      } finally {
+        timeoutId = setTimeout(() => {
+          setLoadingSession(false)
+        }, 100)
+      }
+    }
+
+    initializeSession()
+    
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId)
+    }
+  }, [])
+
+  if (loadingSession) {
+    return null
+  }
+
   return (
     <BrowserRouter>
       <AppRoutes />

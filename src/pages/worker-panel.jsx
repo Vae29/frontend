@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as Agro from '../services/agroData'
-import { clearTokens, getSession } from '../services/authSession'
+import { clearTokens } from '../services/authSession'
 import { logoutUser } from '../services/authApi'
+import useAuthSession from '../hooks/useAuthSession'
 import { getInventarioElementos } from '../utils/inventarioElementos'
 import Header from '../components/Header'
 import Sidebar from '../components/Sidebar'
@@ -36,7 +37,7 @@ function normEtapaKey(s) {
 
 export default function WorkerPanel() {
   const navigate = useNavigate()
-  const session = getSession()
+  const session = useAuthSession()
 
   const worker = useMemo(() => {
     if (!session || session.role !== 'worker') return null
@@ -59,9 +60,12 @@ export default function WorkerPanel() {
     }
   }, [session])
 
-  const [activeSection, setActiveSection] = useState('inicio')
+  const [activeSection, setActiveSection] = useState(() => localStorage.getItem('workerActiveSection') || 'inicio')
   const [fincaId, setFincaId] = useState('')
-  const [pageTitle, setPageTitle] = useState('Inicio - Mi panel')
+  const [pageTitle, setPageTitle] = useState(() => {
+    const section = localStorage.getItem('workerActiveSection') || 'inicio'
+    return section === 'inicio' ? 'Inicio - Mi panel' : SECTION_TITLES[section] || 'Inicio - Mi panel'
+  })
   const [selectedCultivo, setSelectedCultivo] = useState(null)
 
   const [filterCat, setFilterCat] = useState('todos')
@@ -215,6 +219,10 @@ export default function WorkerPanel() {
       links: [{ section: 'cultivos', label: 'Cultivos', icon: '🌱' }],
     },
   ]
+
+  useEffect(() => {
+    localStorage.setItem('workerActiveSection', activeSection)
+  }, [activeSection])
 
   const workerFullName = [worker?.nombre, worker?.apellidos].filter(Boolean).join(' ') || worker?.email || 'Cuenta'
 
