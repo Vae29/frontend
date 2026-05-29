@@ -2,6 +2,11 @@ import { Chart, registerables } from 'chart.js'
 
 Chart.register(...registerables)
 
+function safeNumber(value) {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : 0
+}
+
 function destroyIfExists(canvas) {
   const existing = Chart.getChart(canvas)
   if (existing) existing.destroy()
@@ -95,9 +100,9 @@ export function updateAdminDashboardCharts(dashboardData, refs) {
     const canvas = chartRentabilidad.current
     destroyIfExists(canvas)
     const labels = rentability.map((item) => item.nombre)
-    const ingresos = rentability.map((item) => item.ingresos)
-    const costos = rentability.map((item) => item.costo)
-    const ganancia = rentability.map((item) => item.ganancia)
+    const ingresos = rentability.map((item) => safeNumber(item.ingresos))
+    const costos = rentability.map((item) => safeNumber(item.costo))
+    const ganancia = rentability.map((item) => safeNumber(item.ganancia))
 
     new Chart(canvas, {
       type: 'bar',
@@ -124,12 +129,13 @@ export function updateRentabilidadCharts(dashboardData, refs) {
   const { chartRentabilidadDetallada, chartComparativaIngresosCostos } = refs
   const { rentability = [] } = dashboardData
   const labels = rentability.map((item) => item.nombre)
-  const rows = rentability.map((item) => ({
-    ingresos: item.ingresos,
-    costos: item.costo,
-    ganancia: item.ganancia,
-    margen: item.ingresos > 0 ? ((item.ingresos - item.costo) / item.ingresos) * 100 : 0,
-  }))
+  const rows = rentability.map((item) => {
+    const ingresos = safeNumber(item.ingresos)
+    const costos = safeNumber(item.costo)
+    const ganancia = safeNumber(item.ganancia)
+    const margen = ingresos > 0 ? ((ganancia / ingresos) * 100) : 0
+    return { ingresos, costos, ganancia, margen }
+  })
 
   if (chartRentabilidadDetallada?.current) {
     const canvas = chartRentabilidadDetallada.current

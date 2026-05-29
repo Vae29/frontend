@@ -175,6 +175,8 @@ export default function AdminPanel() {
     }
   }, [editingUser])
 
+  const dynamicModalInitialData = editingFinca ? modalInitialData : memoizedModalInitialData
+
   // Refs para elementos DOM y gráficos.
   const reportRef = useRef(null)
   const cpRef = useRef(null)
@@ -370,7 +372,7 @@ export default function AdminPanel() {
     cultivoId: filtroCultivo ? Number(filtroCultivo) : null,
     categoriaId: filtroCategoriaCosto ? Number(filtroCategoriaCosto) : null,
     usuarioId: filtroUsuario ? Number(filtroUsuario) : null,
-    estado: filtroEstadoCultivo || null,
+    estadoId: filtroEstadoCultivo ? Number(filtroEstadoCultivo) : null,
     fechaInicio: filtroFechaInicio || null,
     fechaFin: filtroFechaFin || null,
   })
@@ -593,12 +595,11 @@ export default function AdminPanel() {
     setShowDynamicModal(true)
   }
 
-  // Abre el modal para editar un usuario existente.
+  // Abre el modal para editar un usuario existente sin diálogo extra.
   const handleOpenEditUser = (usuario) => {
     setEditingUser(usuario)
     setDynamicModalType(MODAL_TYPES.USUARIO)
-    
-    // Carga las opciones necesarias para editar el usuario.
+
     const loadOptions = async () => {
       try {
         const [fincasResponse, cultivosResponse] = await Promise.all([
@@ -640,7 +641,6 @@ export default function AdminPanel() {
     }
 
     loadOptions()
-    
     setShowDynamicModal(true)
   }
 
@@ -654,8 +654,22 @@ export default function AdminPanel() {
 
   // Elimina un usuario después de pedir confirmación.
   const handleDeleteUser = async (id) => {
-    const confirmDelete = window.confirm('¿Estás segura de que quieres eliminar este usuario?')
-    if (!confirmDelete) return
+    const result = await Swal.fire({
+      title: 'Eliminar Usuario',
+      text: '¿Seguro que deseas eliminar este usuario? Esta acción no se puede deshacer.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#dc3545',
+      cancelButtonColor: '#ffffff',
+      customClass: {
+        cancelButton: 'custom-cancel-btn',
+        confirmButton: 'custom-confirm-btn',
+      },
+    })
+
+    if (!result.isConfirmed) return
 
     const response = await deleteUser(id)
     if (!response.success) {
@@ -806,7 +820,24 @@ export default function AdminPanel() {
   })()
 
   // Datos para la tabla de rentabilidad en la sección de análisis.
-  const rentabilidadRows = dashboardData?.rentability || []
+  const rentabilidadRows = (dashboardData?.rentability || []).map((row) => {
+    const ingresos = Number(row.ingresos) || 0
+    const costo = Number(row.costo) || 0
+    const ganancia = Number(row.ganancia) || 0
+    const margen = Number.isFinite(Number(row.margen))
+      ? Number(row.margen)
+      : ingresos > 0
+      ? ((ganancia / ingresos) * 100)
+      : 0
+
+    return {
+      ...row,
+      ingresos,
+      costo,
+      ganancia,
+      margen,
+    }
+  })
 
 
   // Cuando estamos en el dashboard, actualiza los gráficos usando el servicio adminCharts.
@@ -1031,10 +1062,10 @@ export default function AdminPanel() {
         modalType={dynamicModalType}
         onClose={handleCloseDynamicModal}
         onSubmit={handleSubmitDynamicModal}
-        title={editingUser ? 'Editar Usuario' : undefined}
-        submitButtonText={editingUser ? 'Actualizar Usuario' : undefined}
+        title={editingFinca ? 'Editar Finca' : editingUser ? 'Editar Usuario' : undefined}
+        submitButtonText={editingFinca ? 'Actualizar Finca' : editingUser ? 'Actualizar Usuario' : undefined}
         fieldOptions={modalFieldOptions}
-        initialData={memoizedModalInitialData}
+        initialData={dynamicModalInitialData}
         onFieldChange={(name, value) => {
           if (name === 'departamento') {
             const municipios = value ? (MUNICIPIOS_POR_DEPARTAMENTO[value] || []) : []
@@ -1866,7 +1897,7 @@ export default function AdminPanel() {
                     <select id="filtroEstadoCultivo" className="filtro-select" value={filtroEstadoCultivo} onChange={(e) => setFiltroEstadoCultivo(e.target.value)}>
                       <option value="">Todos los estados</option>
                       {filterOptions.estados.map((estado) => (
-                        <option key={estado.id} value={estado.nombre}>
+                        <option key={estado.id} value={estado.id}>
                           {estado.nombre}
                         </option>
                       ))}
@@ -2113,11 +2144,11 @@ export default function AdminPanel() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(rentabilidadRows.length ? rentabilidadRows : [{ nombre: '--', ingresos: 0, costos: 0, ganancia: 0, margen: 0 }]).map((r, i) => (
+                  {(rentabilidadRows.length ? rentabilidadRows : [{ nombre: '--', ingresos: 0, costo: 0, ganancia: 0, margen: 0 }]).map((r, i) => (
                     <tr key={i}>
                       <td>{r.nombre}</td>
                       <td>{Agro.formatCOP(r.ingresos)}</td>
-                      <td>{Agro.formatCOP(r.costos)}</td>
+                      <td>{Agro.formatCOP(r.costo)}</td>
                       <td>{Agro.formatCOP(r.ganancia)}</td>
                       <td>{Number(r.margen || 0).toFixed(1)}%</td>
                     </tr>
