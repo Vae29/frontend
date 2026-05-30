@@ -15,7 +15,7 @@ import '../styles/dashboard.css'
 import '../styles/admin-panel.css'
 import { fetchFincas, createFinca, updateFinca, deleteFinca } from '../services/fincaService'
 import { fetchDashboardForFinca } from '../services/dashboardService'
-import { fetchCultivosPorFinca, fetchTiposCultivo, fetchEstados, createCultivo, updateCultivo } from '../services/cultivoService'
+import { fetchCultivosPorFinca, fetchTiposCultivo, fetchEstados, createCultivo, updateCultivo, deleteCultivo } from '../services/cultivoService'
 import * as reportService from '../services/reportService'
 
 import { MODAL_TYPES, DEPARTAMENTOS, MUNICIPIOS_POR_DEPARTAMENTO } from '../utils/modalConfig'
@@ -143,7 +143,9 @@ export default function AdminPanel() {
   const [filtroCategoriaCosto, setFiltroCategoriaCosto] = useState('')
   const [filtroUsuario, setFiltroUsuario] = useState('')
   const [filtroEstadoCultivo, setFiltroEstadoCultivo] = useState('')
+  const [searchCultivoTerm, setSearchCultivoTerm] = useState('')
   const [filterOptions, setFilterOptions] = useState({ cultivos: [], usuarios: [], estados: [], categorias: [] })
+  const [estadoOptions, setEstadoOptions] = useState([])
   const [reportData, setReportData] = useState(null)
   const [isLoadingReport, setIsLoadingReport] = useState(false)
   const [reportMessage, setReportMessage] = useState(null)
@@ -230,6 +232,19 @@ export default function AdminPanel() {
     }
     loadFilters()
   }, [fincaId])
+
+  useEffect(() => {
+    const loadEstados = async () => {
+      try {
+        const estadosResponse = await fetchEstados()
+        const estadosArray = estadosResponse?.success ? estadosResponse.data : Array.isArray(estadosResponse) ? estadosResponse : estadosResponse?.data || []
+        setEstadoOptions(estadosArray)
+      } catch (err) {
+        console.error('Error cargando estados:', err)
+      }
+    }
+    loadEstados()
+  }, [])
 
   // Cierra automáticamente la notificación después de 3 segundos.
   useEffect(() => {
@@ -562,6 +577,15 @@ export default function AdminPanel() {
     [fincasData]
   )
 
+  const filteredCultivos = useMemo(() => {
+    return cultivos.filter((cultivo) => {
+      const cumpleEstado = !filtroEstadoCultivo || filtroEstadoCultivo === 'todos' || Number(cultivo.idestado) === Number(filtroEstadoCultivo)
+      const cultivoNombre = String(cultivo.nombre || '')
+      const cumpleBusqueda = !searchCultivoTerm || cultivoNombre.toLowerCase().includes(searchCultivoTerm.toLowerCase())
+      return cumpleEstado && cumpleBusqueda
+    })
+  }, [cultivos, filtroEstadoCultivo, searchCultivoTerm])
+
   const cultivosById = useMemo(
     () => Object.fromEntries(cultivosData.map((cultivo) => [Number(cultivo.id), cultivo])),
     [cultivosData]
@@ -794,6 +818,40 @@ export default function AdminPanel() {
     }
     showNotification('Usuario eliminado exitosamente', 'success')
   }
+
+  // Elimina un cultivo después de pedir confirmación.
+  const handleDeleteCultivo = async (id) => {
+    const result = await Swal.fire({
+      title: 'Eliminar Cultivo',
+      text: '¿Seguro que deseas eliminar este cultivo? Esta acción no se puede deshacer.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#dc3545',
+      cancelButtonColor: '#ffffff',
+      customClass: {
+        cancelButton: 'custom-cancel-btn',
+        confirmButton: 'custom-confirm-btn',
+      },
+    })
+
+    if (!result.isConfirmed) return
+
+    const response = await deleteCultivo(id)
+    if (!response.success) {
+      showNotification(response.message, 'error')
+      return
+    }
+
+    setCultivos((prev) => prev.filter((cultivo) => cultivo.id !== id))
+    if (activeCultivoId === id) {
+      setActiveCultivoId(null)
+      setAsignacionesOpen(false)
+    }
+    showNotification('Cultivo eliminado exitosamente', 'success')
+  }
+   
 
   // Envía los datos del modal dinámico según el tipo seleccionado.
   const handleSubmitDynamicModal = async (formData) => {
@@ -1469,7 +1527,11 @@ export default function AdminPanel() {
                 </button>
               </div>
               <button type="button" className="btn-add btn-primary" onClick={() => handleOpenFincaModal()}>
-                + Agregar Nueva Finca
+                              title="Eliminar"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeleteCultivo(c.id)
+                              }}
               </button>
             </div>
             <div className="table-container">
@@ -1687,16 +1749,35 @@ export default function AdminPanel() {
           {/* Sección de cultivos: lista por finca y acceso a detalles individuales. */}
           <section id="cultivos-section" className={`content-section ${activeSection === 'cultivos' ? 'active' : ''}`}>
             <div className="section-header">
-              <input type="text" className="search-input" placeholder="Buscar por nombre..." readOnly />
+              <div className="search-wrapper" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  className="search-input"
+                  placeholder="Buscar cultivo por nombre..."
+                  value={searchCultivoTerm}
+                  onChange={(e) => setSearchCultivoTerm(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="btn-search"
+                  onClick={() => setSearchCultivoTerm('')}
+                >
+                  Limpiar
+                </button>
+              </div>
               <div className="filter-wrapper">
                 <label className="filter-label">Filtrar por estado:</label>
-                <select className="filter-select" defaultValue="todos">
+                <select
+                  className="filter-select"
+                  value={filtroEstadoCultivo || 'todos'}
+                  onChange={(e) => setFiltroEstadoCultivo(e.target.value)}
+                >
                   <option value="todos">Todos</option>
-                  <option value="en-proceso">En Proceso</option>
-                  <option value="en-pausa">En Pausa</option>
-                  <option value="suspendido">Suspendido</option>
-                  <option value="finalizado">Finalizado</option>
-                  <option value="perdido">Perdido</option>
+                  {estadoOptions.map((estado) => (
+                    <option key={estado.id} value={estado.id}>
+                      {estado.nombre}
+                    </option>
+                  ))}
                 </select>
               </div>
               <button type="button" className="btn-add btn-primary" onClick={() => handleOpenDynamicModal(MODAL_TYPES.CULTIVO)}>
@@ -1719,8 +1800,8 @@ export default function AdminPanel() {
                   </tr>
                 </thead>
                 <tbody>
-                  {cultivos && cultivos.length > 0 ? (
-                    cultivos.map((c) => (
+                  {filteredCultivos && filteredCultivos.length > 0 ? (
+                    filteredCultivos.map((c) => (
                       <tr
                         key={c.id}
                         className="data-item"
@@ -1761,7 +1842,12 @@ export default function AdminPanel() {
                             >
                               ✏️
                             </button>
-                            <button type="button" className="btn-icon btn-delete" title="Eliminar">
+                            <button type="button" className="btn-icon btn-delete" title="Eliminar"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeleteCultivo(c.id)
+                              }}
+                            >
                               🗑️
                             </button>
                           </div>

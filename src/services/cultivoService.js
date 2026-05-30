@@ -33,3 +33,8 @@ export async function updateCultivo(id, { nombre, idtipocultivo, idestado, fecha
   });
   return response.data;
 }
+
+export async function deleteCultivo(id) {
+  const response = await httpClient.delete(`/api/cultivos/${id}`);
+  return response.data;
+}
