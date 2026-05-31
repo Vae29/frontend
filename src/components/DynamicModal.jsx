@@ -196,6 +196,8 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
             .filter((field) => {
               // hide fields meant only for editing when creating
               if (field.editOnly && !isEditing) return false
+              // hide fields meant only for creating when editing
+              if (field.createOnly && isEditing) return false
               return true
             })
             .map((field) => (

@@ -514,7 +514,7 @@ export default function WorkerPanel() {
                             <td data-field="nombre">
                               <span className={`worker-cultivo-badge-etapa worker-cultivo-badge-etapa-${etapaClassName(etapa.nombre)}`}>{etapa.nombre}</span>
                             </td>
-                            <td data-field="descripcion">{etapa.descripcion}</td>
+                            <td data-field="descripcion">{etapa.descripcion || '--'}</td>
                             <td data-field="fecha-inicio">{etapa.fechaInicio}</td>
                             <td data-field="fecha-final">{etapa.fechaFinal}</td>
                             <td data-field="estado">

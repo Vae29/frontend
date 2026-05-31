@@ -83,6 +83,16 @@ export async function createEtapaForCultivo(cultivoId, { idetapa, descripcion, f
   return response.data;
 }
 
+export async function updateEtapaForCultivo(etapaCultivoId, { descripcion, idestado }, { forceFinalize = false, forceEnProceso = false } = {}) {
+  const response = await httpClient.put(`/api/cultivos/etapas/${etapaCultivoId}`, {
+    descripcion,
+    idestado,
+    forceFinalize,
+    forceEnProceso,
+  });
+  return response.data;
+}
+
 export async function validateCultivoForCost(cultivoId) {
   const response = await httpClient.get(`/api/cultivos/${cultivoId}/validate-for-cost`);
   return response.data;

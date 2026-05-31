@@ -15,7 +15,7 @@ import '../styles/dashboard.css'
 import '../styles/admin-panel.css'
 import { fetchFincas, createFinca, updateFinca, deleteFinca } from '../services/fincaService'
 import { fetchDashboardForFinca } from '../services/dashboardService'
-import { fetchCultivosPorFinca, fetchTiposCultivo, fetchEstados, createCultivo, updateCultivo, deleteCultivo, fetchCultivoDetalle, fetchCategoriasCosto, fetchSubcategoriasPorCategoria, fetchEstadosPago, fetchEtapaEnProcesoPorCultivo, fetchEtapasPorCultivo, validateCultivoForCost, createCosto, fetchAllEtapasCatalog, createEtapaForCultivo } from '../services/cultivoService'
+import { fetchCultivosPorFinca, fetchTiposCultivo, fetchEstados, createCultivo, updateCultivo, deleteCultivo, fetchCultivoDetalle, fetchCategoriasCosto, fetchSubcategoriasPorCategoria, fetchEstadosPago, fetchEtapaEnProcesoPorCultivo, fetchEtapasPorCultivo, validateCultivoForCost, createCosto, fetchAllEtapasCatalog, createEtapaForCultivo, updateEtapaForCultivo } from '../services/cultivoService'
 import * as reportService from '../services/reportService'
 
 import { MODAL_TYPES, DEPARTAMENTOS, MUNICIPIOS_POR_DEPARTAMENTO } from '../utils/modalConfig'
@@ -437,7 +437,7 @@ export default function AdminPanel() {
         idetapa: etapasArr.map((e) => ({ value: String(e.id), label: e.nombre })),
       }))
       setModalInitialData({
-        idetapa: etapasArr && etapasArr[0] ? String(etapasArr[0].id) : '',
+        idetapa: '',
         descripcion: '',
       })
       setDynamicModalType(MODAL_TYPES.ETAPA)
@@ -525,6 +525,148 @@ export default function AdminPanel() {
 
     loadEtapas()
   }, [selectedCultivoId])
+
+  // Función para abrir el modal de editar etapa
+  const handleOpenEditEtapa = async (etapa) => {
+    try {
+      // Cargar catálogo de etapas
+      const list = await fetchAllEtapasCatalog()
+      const etapasArr = Array.isArray(list) ? list : []
+
+      // Cargar estados
+      const estadosResponse = await fetchEstados()
+      const estadosArr = estadosResponse?.success ? estadosResponse.data : Array.isArray(estadosResponse) ? estadosResponse : estadosResponse?.data || []
+
+      // Filtrar solo "En Proceso" y "Finalizado"
+      const estadosFiltrados = estadosArr.filter((e) => {
+        const nombre = (e.nombre || '').toLowerCase()
+        return nombre === 'en proceso' || nombre === 'finalizado'
+      })
+
+      // Encontrar el ID de la etapa basándose en el nombre
+      const etapaCatalog = etapasArr.find((e) => e.nombre === etapa.nombre)
+      const idetapaValue = etapaCatalog ? String(etapaCatalog.id) : String(etapa.idetapa || '')
+      const editingEtapaData = {
+        ...etapa,
+        id: etapa?.id ?? etapa?.idetapacultivo ?? etapa?.idetapa_cultivo,
+        idetapacultivo: etapa?.idetapacultivo ?? etapa?.id,
+      }
+
+      setEditingEtapa(editingEtapaData)
+      setModalFieldOptions({
+        idetapa: etapasArr.map((e) => ({ value: String(e.id), label: e.nombre })),
+        idestado: estadosFiltrados.map((s) => ({ value: s.id, label: s.nombre })),
+      })
+
+      setModalInitialData({
+        idetapa: idetapaValue,
+        idestado: String(etapa.idestado || ''),
+      })
+      setDynamicModalType(MODAL_TYPES.ETAPA)
+      setShowDynamicModal(true)
+    } catch (e) {
+      console.error('Error preparando edición de etapa:', e)
+      showNotification('Error al cargar datos de la etapa', 'error')
+    }
+  }
+
+  // Función para actualizar una etapa existente
+  const handleSubmitEditEtapa = async (formData) => {
+    const idestado = Number(String(formData.idestado || '').trim())
+    const descripcion = String(formData.descripcion || '')
+
+    if (!editingEtapa) {
+      showNotification('Error: No hay etapa seleccionada para editar', 'error')
+      return
+    }
+
+    try {
+      setIsSavingEtapa(true)
+
+      const updateData = {}
+
+      // Verificar si el estado cambió
+      const estadoCambio = idestado && idestado !== editingEtapa.idestado
+
+      if (estadoCambio) {
+        // Cargar estados para obtener información
+        const estadosResponse = await fetchEstados()
+        const estadosArr = estadosResponse?.success ? estadosResponse.data : Array.isArray(estadosResponse) ? estadosResponse : estadosResponse?.data || []
+        const estadoEnProceso = estadosArr.find((e) => e.nombre?.toLowerCase() === 'en proceso')
+
+        const willSetEnProceso = idestado === estadoEnProceso?.id && editingEtapa.idestado !== estadoEnProceso?.id
+
+        if (willSetEnProceso) {
+          const result = await Swal.fire({
+            title: 'AgroGestion',
+            text: 'Para editar esta etapa se finalizará la etapa que se encuentra actualmente en proceso. ¿Estás seguro de que deseas editar el estado de la etapa?',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, actualizar etapa',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#dc3545',
+            cancelButtonColor: '#ffffff',
+            customClass: {
+              cancelButton: 'custom-cancel-btn',
+              confirmButton: 'custom-confirm-btn',
+            },
+          })
+
+          if (!result.isConfirmed) {
+            setIsSavingEtapa(false)
+            return
+          }
+
+          updateData.forceFinalize = true
+          updateData.forceEnProceso = true
+        }
+      }
+
+      if (descripcion) {
+        updateData.descripcion = descripcion
+      }
+
+      if (idestado) {
+        updateData.idestado = idestado
+      }
+
+      const etapaId = Number(
+        editingEtapa?.id ??
+        editingEtapa?.idetapacultivo ??
+        editingEtapa?.idetapa_cultivo ??
+        editingEtapa?.idEtapaCultivo
+      )
+      if (!etapaId || Number.isNaN(etapaId)) {
+        console.error('editingEtapa inválida al actualizar etapa:', editingEtapa)
+        showNotification('ID de etapa inválido para actualizar', 'error')
+        setIsSavingEtapa(false)
+        return
+      }
+
+      const res = await updateEtapaForCultivo(etapaId, updateData, {
+        forceFinalize: updateData.forceFinalize === true,
+        forceEnProceso: updateData.forceEnProceso === true,
+      })
+
+      if (res && res.success) {
+        showNotification('Etapa actualizada correctamente', 'success')
+        const updated = await fetchEtapasPorCultivo(selectedCultivoId)
+        setEtapasCultivo(sortEtapasOldestFirst(Array.isArray(updated) ? updated : []))
+        setShowDynamicModal(false)
+        setDynamicModalType(null)
+        setEditingEtapa(null)
+      } else {
+        console.error('Error actualizando etapa:', res)
+        showNotification(res?.message || 'Error actualizando etapa', 'error')
+      }
+    } catch (e) {
+      console.error('Error actualizando etapa:', e)
+      const message = e?.response?.data?.message || e?.message || 'Error actualizando etapa'
+      showNotification(message, 'error')
+    } finally {
+      setIsSavingEtapa(false)
+    }
+  }
 
   const fetchFincasList = useCallback(
     async (search = '') => {
@@ -1057,6 +1199,7 @@ export default function AdminPanel() {
     setEditingUser(null)
     setModalFieldOptions({})
     setEditingCultivo(null)
+    setEditingEtapa(null)
   }
 
   // Elimina un usuario después de pedir confirmación.
@@ -1354,8 +1497,12 @@ export default function AdminPanel() {
         break
       }
       case MODAL_TYPES.ETAPA: {
-          // delegate to add etapa handler which includes confirmation and API call
-          await handleSubmitAddEtapa(formData)
+          // Si estamos editando, delegar a handleSubmitEditEtapa, si no, a handleSubmitAddEtapa
+          if (editingEtapa) {
+            await handleSubmitEditEtapa(formData)
+          } else {
+            await handleSubmitAddEtapa(formData)
+          }
           // avoid falling through to default success message
           return
         }
@@ -1404,6 +1551,10 @@ export default function AdminPanel() {
   // (replaced by DynamicModal usage)
   const [etapasCatalog, setEtapasCatalog] = useState([])
   const [isSavingEtapa, setIsSavingEtapa] = useState(false)
+  const [searchEtapaInput, setSearchEtapaInput] = useState('')
+  const [filterEtapaEstado, setFilterEtapaEstado] = useState('todos')
+  const [editingEtapa, setEditingEtapa] = useState(null)
+  const [etapaEstadoOptions, setEtapaEstadoOptions] = useState([])
 
   const sortEtapasOldestFirst = (etapas = []) => {
     return [...etapas].sort((a, b) => {
@@ -1453,7 +1604,20 @@ export default function AdminPanel() {
   })
 
   const etapasRows = (() => {
-    if (!etapasCultivo || etapasCultivo.length === 0) {
+    // Filtrar por búsqueda y estado
+    let etapasFiltradas = etapasCultivoOrdenadas.filter((etapa) => {
+      // Filtro por nombre
+      const cumpleBusqueda = !searchEtapaInput || 
+        etapa.nombre.toLowerCase().includes(searchEtapaInput.toLowerCase())
+      
+      // Filtro por estado
+      const cumpleEstado = !filterEtapaEstado || filterEtapaEstado === 'todos' || 
+        (etapa.estado && etapa.estado.toLowerCase().replace(/\s+/g, '-') === filterEtapaEstado.toLowerCase().replace(/\s+/g, '-'))
+      
+      return cumpleBusqueda && cumpleEstado
+    })
+
+    if (etapasFiltradas.length === 0) {
       return (
         <tr className="data-item">
           <td colSpan={6} style={{ textAlign: 'center' }}>No hay etapas registradas</td>
@@ -1461,12 +1625,12 @@ export default function AdminPanel() {
       )
     }
 
-    return etapasCultivoOrdenadas.map((etapa, i) => (
+    return etapasFiltradas.map((etapa, i) => (
       <tr key={i} className="data-item">
         <td data-field="nombre">
           <span className="detalle-cultivo-badge-etapa">{etapa.nombre}</span>
         </td>
-        <td data-field="descripcion">{etapa.descripcion}</td>
+        <td data-field="descripcion">{etapa.descripcion || '--'}</td>
         <td data-field="fecha-inicio">{formatDateValue(etapa.fechaInicio)}</td>
         <td data-field="fecha-final">{formatDateValue(etapa.fechaFinal)}</td>
         <td data-field="estado">
@@ -1476,7 +1640,7 @@ export default function AdminPanel() {
         </td>
         <td data-field="acciones">
           <div className="action-buttons">
-            <button type="button" className="btn-icon btn-edit" title="Editar">✏️</button>
+            <button type="button" className="btn-icon btn-edit" title="Editar" onClick={() => handleOpenEditEtapa(etapa)}>✏️</button>
             <button type="button" className="btn-icon btn-delete" title="Eliminar">🗑️</button>
           </div>
         </td>
@@ -1722,19 +1886,21 @@ export default function AdminPanel() {
       <DynamicModal
         isOpen={showDynamicModal}
         modalType={dynamicModalType}
-        isEditing={Boolean(editingUser || editingFinca || editingCultivo)}
+        isEditing={Boolean(editingUser || editingFinca || editingCultivo || editingEtapa)}
         onClose={handleCloseDynamicModal}
         onSubmit={handleSubmitDynamicModal}
         title={
           editingFinca ? 'Editar Finca' :
           editingCultivo ? 'Editar Cultivo' :
           editingUser ? 'Editar Usuario' :
+          editingEtapa ? 'Editar Etapa' :
           undefined
         }
         submitButtonText={
           editingFinca ? 'Actualizar Finca' :
           editingCultivo ? 'Actualizar Cultivo' :
           editingUser ? 'Actualizar Usuario' :
+          editingEtapa ? 'Actualizar Etapa' :
           undefined
         }
         fieldOptions={modalFieldOptions}
@@ -2321,14 +2487,28 @@ export default function AdminPanel() {
                   </div>
                   <div className="search-filter-wrapper">
                     <div className="search-wrapper">
-                      <input type="text" className="search-input" placeholder="Buscar por nombre..." readOnly />
-                      <button type="button" className="btn-search">
-                        Buscar
+                      <input 
+                        type="text" 
+                        className="search-input" 
+                        placeholder="Buscar por nombre..." 
+                        value={searchEtapaInput}
+                        onChange={(e) => setSearchEtapaInput(e.target.value)}
+                      />
+                      <button 
+                        type="button" 
+                        className="btn-search"
+                        onClick={() => setSearchEtapaInput('')}
+                      >
+                        Limpiar
                       </button>
                     </div>
                     <div className="filter-wrapper">
                       <label className="filter-label">Filtrar por estado:</label>
-                      <select className="filter-select" defaultValue="todos">
+                      <select 
+                        className="filter-select" 
+                        value={filterEtapaEstado}
+                        onChange={(e) => setFilterEtapaEstado(e.target.value)}
+                      >
                         <option value="todos">Todos</option>
                         <option value="en-proceso">En Proceso</option>
                         <option value="finalizado">Finalizado</option>
@@ -2536,24 +2716,50 @@ export default function AdminPanel() {
                                   {(() => {
                                     const rawCat = costo.categoria || 'Sin categoría'
                                     const norm = normalizeKey(rawCat)
-                                    const matchedKey = CATEGORY_MAP[norm]
-                                    const displayCat = matchedKey || rawCat
+
+                                    let catClass = 'cat-costos-indirectos'
+
+                                    if (norm.includes('mano')) {
+                                      catClass = 'cat-mano-obra'
+                                    } else if (norm.includes('materia')) {
+                                      catClass = 'cat-materia-prima'
+                                    } else if (norm.includes('servicio')) {
+                                      catClass = 'cat-servicios'
+                                    } else if (norm.includes('indirect')) {
+                                      catClass = 'cat-costos-indirectos'
+                                    }
+
                                     return (
-                                      <span className={`detalle-cultivo-badge-categoria cat-${normalizeKey(displayCat).replace(/\s+/g, '-')}`}>
-                                        {displayCat}
+                                      <span className={`detalle-cultivo-badge-categoria ${catClass}`}>
+                                        {rawCat}
                                       </span>
                                     )
                                   })()}
                                 </td>
                                 <td data-field="subcategoria">
                                   {(() => {
+                                    const norm = normalizeKey(costo.categoria || '')
+
+                                    let subCatClass = 'sub-cat-costos-indirectos'
+
+                                    if (norm.includes('mano')) {
+                                      subCatClass = 'sub-cat-mano-obra'
+                                    } else if (norm.includes('materia')) {
+                                      subCatClass = 'sub-cat-materia-prima'
+                                    } else if (norm.includes('servicio')) {
+                                      subCatClass = 'sub-cat-servicios'
+                                    } else if (norm.includes('indirect')) {
+                                      subCatClass = 'sub-cat-costos-indirectos'
+                                    }
+
                                     return (
-                                      <span className={`detalle-cultivo-badge-subcategoria sub-cat-${normalizeKey(costo.subcategoria || 'sin-subcategoria').replace(/\s+/g, '-')}`}>
+                                      <span className={`detalle-cultivo-badge-subcategoria ${subCatClass}`}>
                                         {costo.subcategoria || '--'}
                                       </span>
                                     )
                                   })()}
                                 </td>
+
                                 <td data-field="etapa">
                                   <span className="detalle-cultivo-badge-etapa">
                                     {costo.etapa || '--'}
