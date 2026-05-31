@@ -5,9 +5,11 @@ import { clearTokens } from '../services/authSession'
 import { logoutUser } from '../services/authApi'
 import useAuthSession from '../hooks/useAuthSession'
 import { getInventarioElementos } from '../utils/inventarioElementos'
+import { fetchFincasPorUsuario, fetchCultivosPorUsuario } from '../services/asignaciones-usuarioAPI'
 import Header from '../components/Header'
 import Sidebar from '../components/Sidebar'
 import '../styles/admin-panel.css'
+import '../styles/worker-panel.css'
 
 const SECTION_TITLES = { inicio: 'Inicio', cultivos: 'Mis Cultivos' }
 
@@ -75,8 +77,17 @@ export default function WorkerPanel() {
 
   const [elementosOpen, setElementosOpen] = useState(false)
   const [elementosRows, setElementosRows] = useState([])
+  const [usuarioFincas, setUsuarioFincas] = useState([])
+  const [isLoadingFincas, setIsLoadingFincas] = useState(false)
 
-  const fincasAsignadas = useMemo(() => (worker ? Agro.getTrabajadorFincas(worker.id) : []), [worker])
+  const trabajadorFincas = useMemo(() => (worker ? Agro.getTrabajadorFincas(worker.id) : []), [worker])
+  const fincasAsignadas = useMemo(
+    () => (usuarioFincas.length > 0 ? usuarioFincas : trabajadorFincas),
+    [usuarioFincas, trabajadorFincas],
+  )
+
+  const [cultivosFinca, setCultivosFinca] = useState([])
+  const [isLoadingCultivosFinca, setIsLoadingCultivosFinca] = useState(false)
 
   useEffect(() => {
     if (!session || session.role !== 'worker') {
@@ -84,39 +95,76 @@ export default function WorkerPanel() {
     }
   }, [session, navigate])
 
+  useEffect(() => {
+    const loadFincas = async () => {
+      if (!worker) {
+        setUsuarioFincas([])
+        return
+      }
+      try {
+        setIsLoadingFincas(true)
+        const response = await fetchFincasPorUsuario()
+        const list = response?.success ? response.data : []
+        setUsuarioFincas(Array.isArray(list) ? list : [])
+      } catch (error) {
+        console.error('Error cargando fincas del trabajador:', error)
+        setUsuarioFincas([])
+      } finally {
+        setIsLoadingFincas(false)
+      }
+    }
+
+    loadFincas()
+  }, [worker])
+
   const validFincaId = useMemo(() => {
     if (!worker || fincasAsignadas.length === 0) return ''
-    if (fincaId && fincasAsignadas.some((f) => f.id === fincaId)) return fincaId
+    const selectedFincaId = Number(fincaId)
+    if (selectedFincaId && fincasAsignadas.some((f) => f.id === selectedFincaId)) return selectedFincaId
     return fincasAsignadas[0].id
   }, [worker, fincasAsignadas, fincaId])
 
-  const cultivosFinca = useMemo(() => {
-    if (!worker || !validFincaId) return []
-    return Agro.getTrabajadorCultivos(worker.id, validFincaId)
+  useEffect(() => {
+    const load = async () => {
+      if (!worker || !validFincaId) {
+        setCultivosFinca([])
+        return
+      }
+      try {
+        setIsLoadingCultivosFinca(true)
+        const res = await fetchCultivosPorUsuario(validFincaId)
+        const list = res?.success ? res.data : (Array.isArray(res) ? res : [])
+        setCultivosFinca(Array.isArray(list) ? list : [])
+      } catch (e) {
+        console.error('Error cargando cultivos del trabajador:', e)
+        setCultivosFinca([])
+      } finally {
+        setIsLoadingCultivosFinca(false)
+      }
+    }
+
+    load()
   }, [worker, validFincaId])
 
   const stats = useMemo(() => {
     if (!worker || !validFincaId) {
       return { total: 0, enProceso: 0, finalizados: 0, fincas: 0 }
     }
-    const list = Agro.getTrabajadorCultivos(worker.id, validFincaId)
+    const list = cultivosFinca || []
     return {
       total: list.length,
-      enProceso: list.filter((c) => c.estado === 'en-proceso').length,
-      finalizados: list.filter((c) => c.estado === 'finalizado').length,
+      enProceso: list.filter((c) => (c.estado || '').toLowerCase() === 'en-proceso').length,
+      finalizados: list.filter((c) => (c.estado || '').toLowerCase() === 'finalizado').length,
       fincas: Agro.getTrabajadorFincas(worker.id).length,
     }
-  }, [worker, validFincaId])
+  }, [worker, validFincaId, cultivosFinca])
 
   const resumenRows = useMemo(() => {
     if (!worker || !validFincaId) return []
-    return Agro.getTrabajadorCultivos(worker.id, validFincaId).filter((c) => c.estado === 'en-proceso')
-  }, [worker, validFincaId])
+    return (cultivosFinca || []).filter((c) => (c.estado || '').toLowerCase() === 'en-proceso')
+  }, [worker, validFincaId, cultivosFinca])
 
-  const costosSource = useMemo(
-    () => (selectedCultivo ? (Agro.getDetalleCultivo(selectedCultivo.id).costos || []) : []),
-    [selectedCultivo],
-  )
+  const costosSource = useMemo(() => (selectedCultivo ? (Agro.getDetalleCultivo(selectedCultivo.id).costos || []) : []), [selectedCultivo])
 
   const filteredCostos = useMemo(() => {
     let list = costosSource
@@ -235,7 +283,7 @@ export default function WorkerPanel() {
       <Sidebar
         roleSubtitle="Rol: Trabajador"
         fincaOptions={fincasAsignadas}
-        fincaValue={validFincaId}
+        fincaValue={validFincaId ? String(validFincaId) : ''}
         onFincaChange={(id) => setFincaId(id)}
         navItems={navItems}
         activeNavSection={activeSection === 'detalle-cultivo' ? null : activeSection}
@@ -325,9 +373,9 @@ export default function WorkerPanel() {
                           <td data-field="nombre">{c.nombre}</td>
                           <td data-field="tipo">{c.tipo}</td>
                           <td data-field="fecha-inicio">{c.fechaInicio}</td>
-                          <td data-field="estado">
-                            <span className={`status-badge status-${c.estado}`}>{c.estado.replace('-', ' ')}</span>
-                          </td>
+                                <td data-field="estado">
+                                  <span className={`worker-cultivo-badge-estado worker-cultivo-badge-estado-${c.estado}`}>{c.estado.replace('-', ' ')}</span>
+                                </td>
                         </tr>
                       ))
                     )}
@@ -388,7 +436,7 @@ export default function WorkerPanel() {
                       <td data-field="fecha-siembra">{cultivo.fechaInicio}</td>
                       <td data-field="fecha-cosecha">{cultivo.fechaCosecha || '--'}</td>
                       <td data-field="estado">
-                        <span className={`status-badge status-${cultivo.estado}`}>{cultivo.estado.replace('-', ' ')}</span>
+                        <span className={`worker-cultivo-badge-estado worker-cultivo-badge-estado-${cultivo.estado}`}>{cultivo.estado.replace('-', ' ')}</span>
                       </td>
                       <td data-field="acciones">
                         <div className="action-buttons">
@@ -415,7 +463,7 @@ export default function WorkerPanel() {
               <>
                 <div className="cultivo-estado-container">
                   <label className="estado-label">Estado actual:</label>
-                  <span id="cultivo-estado-badge" className={`status-badge status-${selectedCultivo.estado || 'desconocido'}`}>
+                  <span id="cultivo-estado-badge" className={`worker-cultivo-badge-estado worker-cultivo-badge-estado-${selectedCultivo.estado || 'desconocido'}`}>
                     {selectedCultivo.estado
                       ? selectedCultivo.estado.replace('-', ' ').charAt(0).toUpperCase() + selectedCultivo.estado.replace('-', ' ').slice(1)
                       : '--'}
@@ -464,13 +512,13 @@ export default function WorkerPanel() {
                         {(detalle?.etapas || []).map((etapa, i) => (
                           <tr key={i} className="data-item">
                             <td data-field="nombre">
-                              <span className={`etapa-badge etapa-${etapaClassName(etapa.nombre)}`}>{etapa.nombre}</span>
+                              <span className={`worker-cultivo-badge-etapa worker-cultivo-badge-etapa-${etapaClassName(etapa.nombre)}`}>{etapa.nombre}</span>
                             </td>
                             <td data-field="descripcion">{etapa.descripcion}</td>
                             <td data-field="fecha-inicio">{etapa.fechaInicio}</td>
                             <td data-field="fecha-final">{etapa.fechaFinal}</td>
                             <td data-field="estado">
-                              <span className={`status-badge status-${etapa.estado}`}>{etapa.estado.replace('-', ' ')}</span>
+                              <span className={`worker-cultivo-badge-estado worker-cultivo-badge-estado-${etapa.estado}`}>{etapa.estado.replace('-', ' ')}</span>
                             </td>
                             <td data-field="acciones">
                               <div className="action-buttons">
@@ -625,9 +673,11 @@ export default function WorkerPanel() {
                             <td data-field="fecha">{costo.fecha}</td>
                             <td data-field="usuario">{costo.usuario}</td>
                             <td data-field="categoria">
-                              <span className={`categoria-badge cat-${costo.categoria.toLowerCase().replace(/ /g, '-')}`}>{costo.categoria}</span>
+                              <span className={`worker-cultivo-badge-categoria cat-${costo.categoria.toLowerCase().replace(/ /g, '-')}`}>{costo.categoria}</span>
                             </td>
-                            <td data-field="etapa">{costo.etapa}</td>
+                            <td data-field="etapa">
+                              <span className={`worker-cultivo-badge-etapa-small worker-cultivo-badge-etapa-${normEtapaKey(costo.etapa)}`}>{costo.etapa}</span>
+                            </td>
                             <td data-field="descripcion">{costo.descripcion}</td>
                             <td data-field="valor">{costo.valor}</td>
                             <td data-field="acciones">

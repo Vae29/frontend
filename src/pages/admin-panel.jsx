@@ -235,7 +235,7 @@ export default function AdminPanel() {
     }
   }, [editingUser])
 
-  const dynamicModalInitialData = editingFinca || editingCultivo ? modalInitialData : memoizedModalInitialData
+  const dynamicModalInitialData = modalInitialData || memoizedModalInitialData
 
   // Refs para elementos DOM y gráficos.
   const reportRef = useRef(null)
@@ -432,8 +432,14 @@ export default function AdminPanel() {
       const etapasArr = Array.isArray(list) ? list : []
       setEtapasCatalog(etapasArr)
       // Prepare DynamicModal options and open it
-      setModalFieldOptions((prev) => ({ ...prev, idetapa: etapasArr.map((e) => ({ value: e.id, label: e.nombre })) }))
-      setModalInitialData({ idetapa: etapasArr && etapasArr[0] ? etapasArr[0].id : '', descripcion: '' })
+      setModalFieldOptions((prev) => ({
+        ...prev,
+        idetapa: etapasArr.map((e) => ({ value: String(e.id), label: e.nombre })),
+      }))
+      setModalInitialData({
+        idetapa: etapasArr && etapasArr[0] ? String(etapasArr[0].id) : '',
+        descripcion: '',
+      })
       setDynamicModalType(MODAL_TYPES.ETAPA)
       setShowDynamicModal(true)
     } catch (e) {
@@ -443,9 +449,9 @@ export default function AdminPanel() {
   }
 
   const handleSubmitAddEtapa = async (formData) => {
-    const idetapa = Number(formData.idetapa || formData.idetapa === 0 ? formData.idetapa : null)
-    const descripcion = formData.descripcion || ''
-    if (!idetapa) {
+    const idetapa = Number(String(formData.idetapa || '').trim())
+    const descripcion = String(formData.descripcion || '')
+    if (!Number.isInteger(idetapa) || idetapa <= 0) {
       showNotification('Selecciona una etapa válida', 'error')
       return
     }
@@ -490,7 +496,8 @@ export default function AdminPanel() {
       }
     } catch (e) {
       console.error('Error creando etapa:', e)
-      showNotification('Error creando etapa', 'error')
+      const message = e?.response?.data?.message || e?.message || 'Error creando etapa'
+      showNotification(message, 'error')
     } finally {
       setIsSavingEtapa(false)
     }
@@ -1457,13 +1464,15 @@ export default function AdminPanel() {
     return etapasCultivoOrdenadas.map((etapa, i) => (
       <tr key={i} className="data-item">
         <td data-field="nombre">
-          <span className={`etapa-badge etapa-${etapaClassName(etapa.nombre)}`}>{etapa.nombre}</span>
+          <span className="detalle-cultivo-badge-etapa">{etapa.nombre}</span>
         </td>
         <td data-field="descripcion">{etapa.descripcion}</td>
         <td data-field="fecha-inicio">{formatDateValue(etapa.fechaInicio)}</td>
         <td data-field="fecha-final">{formatDateValue(etapa.fechaFinal)}</td>
         <td data-field="estado">
-          <span className={`status-badge status-${etapa.estado}`}>{etapa.estado.replace('-', ' ')}</span>
+          <span className={`detalle-cultivo-badge-estado detalle-cultivo-badge-estado-${String(etapa.estado || 'desconocido').toLowerCase().replace(/\s+/g, '-')}`}>
+            {etapa.estado.replace('-', ' ')}
+          </span>
         </td>
         <td data-field="acciones">
           <div className="action-buttons">
@@ -2296,7 +2305,7 @@ export default function AdminPanel() {
                       ? rawEstado.replace(/-/g, ' ').replace(/\s+/g, ' ').trim()
                       : '--'
                     return (
-                      <span id="cultivo-estado-badge" className={`status-badge status-${estadoClass}`}>
+                      <span id="cultivo-estado-badge" className={`detalle-cultivo-badge-estado detalle-cultivo-badge-estado-${estadoClass}`}>
                         {estadoLabel}
                       </span>
                     )
@@ -2530,7 +2539,7 @@ export default function AdminPanel() {
                                     const matchedKey = CATEGORY_MAP[norm]
                                     const displayCat = matchedKey || rawCat
                                     return (
-                                      <span className={`dc-categoria-badge cat-${normalizeKey(displayCat).replace(/\s+/g, '-')}`}>
+                                      <span className={`detalle-cultivo-badge-categoria cat-${normalizeKey(displayCat).replace(/\s+/g, '-')}`}>
                                         {displayCat}
                                       </span>
                                     )
@@ -2539,21 +2548,21 @@ export default function AdminPanel() {
                                 <td data-field="subcategoria">
                                   {(() => {
                                     return (
-                                      <span className={`dc-subcategoria-badge sub-cat-${normalizeKey(costo.subcategoria || 'sin-subcategoria').replace(/\s+/g, '-')}`}>
+                                      <span className={`detalle-cultivo-badge-subcategoria sub-cat-${normalizeKey(costo.subcategoria || 'sin-subcategoria').replace(/\s+/g, '-')}`}>
                                         {costo.subcategoria || '--'}
                                       </span>
                                     )
                                   })()}
                                 </td>
                                 <td data-field="etapa">
-                                  <span className={`etapa-badge`} style={{ backgroundColor: '#ff9800', color: '#fff', padding: '6px 10px', borderRadius: '8px', display: 'inline-block' }}>
+                                  <span className="detalle-cultivo-badge-etapa">
                                     {costo.etapa || '--'}
                                   </span>
                                 </td>
                                 <td data-field="descripcion">{costo.descripcion || '--'}</td>
                                 <td data-field="valor">{valorTexto}</td>
                                 <td data-field="estado">
-                                  <span className={`status-badge status-${estadoLower}`}>
+                                  <span className={`detalle-cultivo-badge-estado detalle-cultivo-badge-estado-${estadoLower}`}>
                                     {estadoLabel}
                                   </span>
                                 </td>

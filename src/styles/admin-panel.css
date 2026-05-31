@@ -992,6 +992,106 @@ html, body {
     letter-spacing: 0.3px;
 }
 
+/* Badges exclusivos para Detalle de Cultivo */
+#detalle-cultivo-section .detalle-cultivo-badge-estado,
+#detalle-cultivo-section .detalle-cultivo-badge-etapa,
+#detalle-cultivo-section .detalle-cultivo-badge-categoria,
+#detalle-cultivo-section .detalle-cultivo-badge-subcategoria {
+    display: inline-block;
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-size: 0.85em;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    text-align: center;
+    vertical-align: middle;
+    white-space: nowrap;
+    text-transform: capitalize;
+}
+
+#detalle-cultivo-section .detalle-cultivo-badge-etapa {
+    background-color: #f39c12;
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(243, 156, 18, 0.24);
+}
+
+#detalle-cultivo-section .detalle-cultivo-badge-estado {
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+#detalle-cultivo-section .detalle-cultivo-badge-estado-finalizado,
+#detalle-cultivo-section .detalle-cultivo-badge-estado-pagado {
+    background-color: #27ae60;
+}
+
+#detalle-cultivo-section .detalle-cultivo-badge-estado-en-proceso,
+#detalle-cultivo-section .detalle-cultivo-badge-estado-pendiente,
+#detalle-cultivo-section .detalle-cultivo-badge-estado-activo {
+    background-color: #3498db;
+}
+
+#detalle-cultivo-section .detalle-cultivo-badge-estado-desconocido {
+    background-color: #7f8c8d;
+}
+
+#detalle-cultivo-section .detalle-cultivo-badge-categoria {
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    border-radius: 10px;
+    padding: 6px 12px;
+    text-transform: capitalize;
+}
+
+#detalle-cultivo-section .detalle-cultivo-badge-categoria.cat-mano-obra {
+    background-color: #2E7D32;
+}
+
+#detalle-cultivo-section .detalle-cultivo-badge-categoria.cat-materia-prima {
+    background-color: #1565C0;
+}
+
+#detalle-cultivo-section .detalle-cultivo-badge-categoria.cat-servicios {
+    background-color: #6A1B9A;
+}
+
+#detalle-cultivo-section .detalle-cultivo-badge-categoria.cat-costos-indirectos {
+    background-color: #FF6F00;
+}
+
+#detalle-cultivo-section .detalle-cultivo-badge-subcategoria {
+    color: #1f2937;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.10);
+    border-radius: 10px;
+    padding: 6px 10px;
+    text-transform: none;
+}
+
+#detalle-cultivo-section .detalle-cultivo-badge-subcategoria.sub-cat-mano-obra {
+    background-color: rgba(46, 125, 50, 0.12);
+    color: #145a22;
+}
+
+#detalle-cultivo-section .detalle-cultivo-badge-subcategoria.sub-cat-materia-prima {
+    background-color: rgba(21, 101, 192, 0.12);
+    color: #083a63;
+}
+
+#detalle-cultivo-section .detalle-cultivo-badge-subcategoria.sub-cat-servicios {
+    background-color: rgba(106, 27, 154, 0.12);
+    color: #3e0f52;
+}
+
+#detalle-cultivo-section .detalle-cultivo-badge-subcategoria.sub-cat-costos-indirectos {
+    background-color: rgba(255, 111, 0, 0.12);
+    color: #663f00;
+}
+
+#detalle-cultivo-section .detalle-cultivo-badge-subcategoria.sub-cat-sin-subcategoria {
+    background-color: rgba(149, 165, 166, 0.16);
+    color: #2c3e50;
+}
+
 /* Secciones de información */
 .info-section {
     background-color: var(--bg-white);

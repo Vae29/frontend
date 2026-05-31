@@ -1,0 +1,101 @@
+/* Worker Panel specific badge styles - isolated to avoid conflicts with Admin Panel badges */
+
+/* Estado badges */
+.worker-cultivo-badge-estado {
+  display: inline-block;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 0.85em;
+  font-weight: 600;
+  text-align: center;
+  min-width: 100px;
+  letter-spacing: 0.3px;
+  text-transform: capitalize;
+  color: var(--text-white);
+}
+
+.worker-cultivo-badge-estado-finalizado {
+  background-color: var(--status-finalizado);
+  box-shadow: 0 2px 8px var(--status-finalizado-transparent);
+}
+
+.worker-cultivo-badge-estado-en-proceso {
+  background-color: var(--status-proceso);
+  box-shadow: 0 2px 8px var(--status-proceso-transparent);
+}
+
+.worker-cultivo-badge-estado-desconocido {
+  background-color: #7f8c8d;
+  color: var(--text-white);
+}
+
+/* Etapa badges (ovaladas, color naranja) */
+.worker-cultivo-badge-etapa {
+  display: inline-block;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 0.85em;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-align: center;
+  vertical-align: middle;
+  white-space: nowrap;
+  text-transform: capitalize;
+  background-color: var(--etapa-color);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(243, 156, 18, 0.24);
+}
+
+/* Smaller etapa badge for costs table */
+.worker-cultivo-badge-etapa-small {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.82em;
+  font-weight: 600;
+  color: #ffffff;
+  background-color: var(--etapa-color);
+  box-shadow: 0 2px 6px rgba(243,156,18,0.18);
+}
+
+/* Categoria badges - keep same visual colors but isolated names */
+.worker-cultivo-badge-categoria {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 0.85em;
+  font-weight: 600;
+  text-align: center;
+  color: var(--text-white);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.worker-cultivo-badge-categoria.cat-mano-obra { background-color: var(--cat-mano-obra); }
+.worker-cultivo-badge-categoria.cat-materia-prima { background-color: var(--cat-materia-prima); }
+.worker-cultivo-badge-categoria.cat-servicios { background-color: var(--cat-servicios); }
+.worker-cultivo-badge-categoria.cat-costos-indirectos { background-color: var(--cat-costos-indirectos); }
+
+/* Subcategoria badges (lighter tint) */
+.worker-cultivo-badge-subcategoria {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--text-dark);
+  box-shadow: 0 3px 10px rgba(0,0,0,0.10);
+}
+
+.worker-cultivo-badge-subcategoria.sub-cat-mano-obra { background-color: rgba(46,125,50,0.12); color: #145a22; }
+.worker-cultivo-badge-subcategoria.sub-cat-materia-prima { background-color: rgba(21,101,192,0.12); color: #083a63; }
+.worker-cultivo-badge-subcategoria.sub-cat-servicios { background-color: rgba(106,27,154,0.12); color: #3e0f52; }
+.worker-cultivo-badge-subcategoria.sub-cat-costos-indirectos { background-color: rgba(255,111,0,0.12); color: #663f00; }
+
+/* Generic worker namespace safety: ensure selector specificity inside worker detail section */
+#detalle-cultivo-section .worker-cultivo-badge-estado,
+#detalle-cultivo-section .worker-cultivo-badge-etapa,
+#detalle-cultivo-section .worker-cultivo-badge-categoria,
+#detalle-cultivo-section .worker-cultivo-badge-subcategoria,
+#detalle-cultivo-section .worker-cultivo-badge-etapa-small {
+  /* visual properties already defined above; this block ensures these rules apply within the worker detail context */
+}

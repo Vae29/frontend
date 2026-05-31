@@ -73,7 +73,7 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
     })
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
 
     // Validar el formulario
@@ -84,7 +84,11 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
     }
 
     // Enviar los datos
-    onSubmit(formData)
+    try {
+      await onSubmit(formData)
+    } catch (submitError) {
+      console.error('Error submitting modal form:', submitError)
+    }
 
     // Resetear el formulario
     setFormData({})
@@ -312,7 +316,7 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
               ) : field.type === 'select' ? (
                 <select
                   name={field.name}
-                  value={field.multiple ? formData[field.name] || [] : formData[field.name] || ''}
+                  value={field.multiple ? formData[field.name] || [] : formData[field.name] ?? ''}
                   multiple={field.multiple}
                   size={field.multiple ? Math.min(6, (fieldOptions[field.name] || field.options || []).length || 3) : undefined}
                   onChange={handleInputChange}
@@ -343,11 +347,14 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
                   }}
                 >
                   {!field.multiple && <option value="">Seleccionar {field.label}</option>}
-                  {(fieldOptions[field.name] || field.options || []).map((option) => (
-                    <option key={option.value || option} value={option.value || option}>
-                      {option.label || option}
-                    </option>
-                  ))}
+                  {(fieldOptions[field.name] || field.options || []).map((option) => {
+                    const optionValue = String(option.value ?? option)
+                    return (
+                      <option key={optionValue} value={optionValue}>
+                        {option.label || optionValue}
+                      </option>
+                    )
+                  })}
                 </select>
               ) : field.type === 'textarea' ? (
                 <textarea
