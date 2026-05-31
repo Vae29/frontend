@@ -177,7 +177,7 @@ export default function WorkerPanel() {
     setFilterDesde('')
     setFilterHasta('')
     setActiveSection('detalle-cultivo')
-    setPageTitle(`Cultivo de ${cultivo.nombre}`)
+    setPageTitle(`Detalle del Cultivo: ${cultivo.nombre}`)
     setElementosOpen(false)
   }
 
@@ -414,10 +414,11 @@ export default function WorkerPanel() {
             {selectedCultivo ? (
               <>
                 <div className="cultivo-estado-container">
-                  <label className="estado-label">Estado:</label>
-                  <span id="cultivo-estado-badge" className={`status-badge status-${selectedCultivo.estado}`}>
-                    {selectedCultivo.estado.replace('-', ' ').charAt(0).toUpperCase() +
-                      selectedCultivo.estado.replace('-', ' ').slice(1)}
+                  <label className="estado-label">Estado actual:</label>
+                  <span id="cultivo-estado-badge" className={`status-badge status-${selectedCultivo.estado || 'desconocido'}`}>
+                    {selectedCultivo.estado
+                      ? selectedCultivo.estado.replace('-', ' ').charAt(0).toUpperCase() + selectedCultivo.estado.replace('-', ' ').slice(1)
+                      : '--'}
                   </span>
                 </div>
 

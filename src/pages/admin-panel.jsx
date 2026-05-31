@@ -15,7 +15,7 @@ import '../styles/dashboard.css'
 import '../styles/admin-panel.css'
 import { fetchFincas, createFinca, updateFinca, deleteFinca } from '../services/fincaService'
 import { fetchDashboardForFinca } from '../services/dashboardService'
-import { fetchCultivosPorFinca, fetchTiposCultivo, fetchEstados, createCultivo, updateCultivo, deleteCultivo } from '../services/cultivoService'
+import { fetchCultivosPorFinca, fetchTiposCultivo, fetchEstados, createCultivo, updateCultivo, deleteCultivo, fetchCultivoDetalle, fetchCategoriasCosto, fetchSubcategoriasPorCategoria, fetchEstadosPago, fetchEtapaEnProcesoPorCultivo, fetchEtapasPorCultivo, validateCultivoForCost, createCosto, fetchAllEtapasCatalog, createEtapaForCultivo } from '../services/cultivoService'
 import * as reportService from '../services/reportService'
 
 import { MODAL_TYPES, DEPARTAMENTOS, MUNICIPIOS_POR_DEPARTAMENTO } from '../utils/modalConfig'
@@ -64,6 +64,45 @@ function formatDateForInput(value) {
   const d = new Date(value)
   if (Number.isNaN(d.getTime())) return ''
   return d.toISOString().slice(0, 10)
+}
+
+// Colores fijos para las 4 categorías generales y utilidades para subcategorías
+const CATEGORY_COLORS = {
+  'Mano de Obra': '#2E7D32', // verde oscuro
+  'Materia Prima': '#1565C0', // azul
+  'Servicios': '#6A1B9A', // morado
+  'Costos Indirectos': '#FF6F00', // naranja oscuro
+}
+
+// Normaliza cadenas para comparaciones (quita acentos, caracteres no alfanuméricos, y normaliza espacios)
+function normalizeKey(str) {
+  if (!str) return ''
+  return String(str)
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
+const CATEGORY_MAP = Object.fromEntries(
+  Object.keys(CATEGORY_COLORS).map((k) => [normalizeKey(k), k])
+)
+
+function lightenHex(hex, percent) {
+  try {
+    const amount = Math.round(255 * percent)
+    const num = parseInt(hex.replace('#', ''), 16)
+    let r = (num >> 16) + amount
+    let g = ((num >> 8) & 0x00FF) + amount
+    let b = (num & 0x0000FF) + amount
+    r = Math.min(255, Math.max(0, r))
+    g = Math.min(255, Math.max(0, g))
+    b = Math.min(255, Math.max(0, b))
+    return `#${(r << 16 | g << 8 | b).toString(16).padStart(6, '0')}`
+  } catch (e) {
+    return hex
+  }
 }
 
 const COSTOS_GENERALES_ROWS = [
@@ -122,7 +161,10 @@ export default function AdminPanel() {
     const initial = localStorage.getItem('activeSection') || 'dashboard'
     return SECTION_TITLES[initial] || 'Dashboard'
   })
-  const [selectedCultivoId, setSelectedCultivoId] = useState(null)
+  const [selectedCultivoId, setSelectedCultivoId] = useState(() => {
+    const storedId = localStorage.getItem('selectedCultivoId')
+    return storedId ? Number(storedId) : null
+  })
   // El usuario seleccionado para ver asignaciones de fincas/cultivos.
   const [activeUsuarioId, setActiveUsuarioId] = useState(null)
   // Controla si se muestran las asignaciones de usuario.
@@ -176,6 +218,8 @@ export default function AdminPanel() {
   const [isLoadingCultivos, setIsLoadingCultivos] = useState(false)
   const [editingFinca, setEditingFinca] = useState(null)
   const [editingCultivo, setEditingCultivo] = useState(null)
+  const [detalleCostos, setDetalleCostos] = useState([])
+  const [isLoadingDetalleCostos, setIsLoadingDetalleCostos] = useState(false)
 
   // Memoize initial data for DynamicModal to avoid recreating object each render
   const memoizedModalInitialData = useMemo(() => {
@@ -354,6 +398,126 @@ export default function AdminPanel() {
     },
     []
   )
+
+  useEffect(() => {
+    if (!selectedCultivoId) {
+      setDetalleCostos([])
+      setIsLoadingDetalleCostos(false)
+      return
+    }
+
+    const loadDetalleCostos = async () => {
+      try {
+        setIsLoadingDetalleCostos(true)
+        const detalle = await fetchCultivoDetalle(selectedCultivoId)
+        setDetalleCostos(Array.isArray(detalle) ? detalle : [])
+      } catch (error) {
+        console.error('Error cargando detalle de costos del cultivo:', error)
+        setDetalleCostos([])
+      } finally {
+        setIsLoadingDetalleCostos(false)
+      }
+    }
+
+    loadDetalleCostos()
+  }, [selectedCultivoId])
+
+  const openAddEtapaModal = async () => {
+    if (!selectedCultivoId) {
+      await Swal.fire({ title: 'AgroGestion', text: 'Selecciona un cultivo primero.', icon: 'warning', confirmButtonText: 'Aceptar', confirmButtonColor: '#dc3545' })
+      return
+    }
+    try {
+      const list = await fetchAllEtapasCatalog()
+      const etapasArr = Array.isArray(list) ? list : []
+      setEtapasCatalog(etapasArr)
+      // Prepare DynamicModal options and open it
+      setModalFieldOptions((prev) => ({ ...prev, idetapa: etapasArr.map((e) => ({ value: e.id, label: e.nombre })) }))
+      setModalInitialData({ idetapa: etapasArr && etapasArr[0] ? etapasArr[0].id : '', descripcion: '' })
+      setDynamicModalType(MODAL_TYPES.ETAPA)
+      setShowDynamicModal(true)
+    } catch (e) {
+      console.error('Error cargando catálogo de etapas:', e)
+      showNotification('No se pudo cargar el catálogo de etapas', 'error')
+    }
+  }
+
+  const handleSubmitAddEtapa = async (formData) => {
+    const idetapa = Number(formData.idetapa || formData.idetapa === 0 ? formData.idetapa : null)
+    const descripcion = formData.descripcion || ''
+    if (!idetapa) {
+      showNotification('Selecciona una etapa válida', 'error')
+      return
+    }
+    try {
+      setIsSavingEtapa(true)
+      const current = await fetchEtapaEnProcesoPorCultivo(selectedCultivoId)
+      const hasEnProceso = current && ((Array.isArray(current) && current.length) || current.id || current.idetapacultivo)
+      let forceFinalize = false
+      if (hasEnProceso) {
+        const result = await Swal.fire({
+          title: 'AgroGestion',
+          text: 'Para registrar esta nueva etapa se finalizará la etapa que se encuentra actualmente en proceso. ¿Estás seguro de que deseas agregar la nueva etapa?',
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonText: 'Sí, agregar nueva etapa',
+          cancelButtonText: 'Cancelar',
+          confirmButtonColor: '#dc3545',
+          cancelButtonColor: '#ffffff',
+          customClass: {
+            cancelButton: 'custom-cancel-btn',
+            confirmButton: 'custom-confirm-btn',
+          },
+        })
+        if (!result.isConfirmed) {
+          setIsSavingEtapa(false)
+          return
+        }
+        forceFinalize = true
+      }
+
+      const res = await createEtapaForCultivo(selectedCultivoId, { idetapa, descripcion, forceFinalize })
+      if (res && res.success) {
+        showNotification('Etapa registrada correctamente', 'success')
+        const updated = await fetchEtapasPorCultivo(selectedCultivoId)
+        setEtapasCultivo(sortEtapasOldestFirst(Array.isArray(updated) ? updated : []))
+        // close DynamicModal
+        setShowDynamicModal(false)
+        setDynamicModalType(null)
+      } else {
+        console.error('Error creando etapa:', res)
+        showNotification(res?.message || 'Error creando etapa', 'error')
+      }
+    } catch (e) {
+      console.error('Error creando etapa:', e)
+      showNotification('Error creando etapa', 'error')
+    } finally {
+      setIsSavingEtapa(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!selectedCultivoId) {
+      setEtapasCultivo([])
+      setIsLoadingEtapas(false)
+      return
+    }
+
+    const loadEtapas = async () => {
+      try {
+        setIsLoadingEtapas(true)
+        const list = await fetchEtapasPorCultivo(selectedCultivoId)
+        setEtapasCultivo(sortEtapasOldestFirst(Array.isArray(list) ? list : []))
+      } catch (e) {
+        console.error('Error cargando etapas del cultivo:', e)
+        setEtapasCultivo([])
+      } finally {
+        setIsLoadingEtapas(false)
+      }
+    }
+
+    loadEtapas()
+  }, [selectedCultivoId])
 
   const fetchFincasList = useCallback(
     async (search = '') => {
@@ -629,7 +793,7 @@ export default function AdminPanel() {
   }, [activeUsuario, fincasById, cultivosById])
 
   // Abre un modal dinámico de creación dependiendo del tipo seleccionado.
-  const handleOpenDynamicModal = (type) => {
+  const handleOpenDynamicModal = async (type) => {
     // Clear any previous editing state to avoid stale initial data
     setEditingUser(null)
     setEditingFinca(null)
@@ -718,9 +882,111 @@ export default function AdminPanel() {
       })()
     }
 
-    // for other types, open modal immediately
-    if (type !== MODAL_TYPES.USUARIO && type !== MODAL_TYPES.CULTIVO) setShowDynamicModal(true)
+    if (type !== MODAL_TYPES.USUARIO && type !== MODAL_TYPES.CULTIVO && type !== MODAL_TYPES.COSTO) setShowDynamicModal(true)
+
+    if (type === MODAL_TYPES.COSTO) {
+      if (!selectedCultivoId) {
+        await Swal.fire({
+          title: 'AgroGestion',
+          text: 'Debes seleccionar un cultivo primero para poder registrar el costo.',
+          icon: 'warning',
+          confirmButtonText: 'Aceptar',
+          confirmButtonColor: '#dc3545',
+          cancelButtonColor: '#ffffff',
+          customClass: {
+            confirmButton: 'custom-confirm-btn',
+          },
+        })
+        return
+      }
+
+      // Validar que el cultivo puede agregar costos
+      const validateCultivo = async () => {
+        try {
+          const validation = await validateCultivoForCost(selectedCultivoId)
+          if (!validation.valid) {
+            if (validation.reason === 'no_etapa_en_proceso') {
+              await Swal.fire({
+                title: 'AgroGestion',
+                text: 'No puede registrar el costo debido a que el cultivo no tiene etapas en proceso',
+                icon: 'warning',
+                confirmButtonText: 'Aceptar',
+                confirmButtonColor: '#dc3545',
+                cancelButtonColor: '#ffffff',
+                customClass: {
+                  confirmButton: 'custom-confirm-btn',
+                },
+              })
+              return
+            }
+
+            let errorMsg = 'No es posible agregar el costo'
+            if (validation.reason === 'no_etapas') {
+              errorMsg += ' debido a que el cultivo actualmente no tiene etapas registradas'
+            } else if (validation.reason === 'cultivo_not_in_process') {
+              errorMsg += ' debido a que el cultivo no está en proceso'
+            }
+
+            await Swal.fire({
+              title: 'AgroGestion',
+              text: errorMsg,
+              icon: 'warning',
+              confirmButtonText: 'Aceptar',
+              confirmButtonColor: '#dc3545',
+              cancelButtonColor: '#ffffff',
+              customClass: {
+                confirmButton: 'custom-confirm-btn',
+              },
+            })
+            return
+          }
+
+          // Cargar categorías y estados de pago
+          const [categoriasResponse, estadosPagoResponse] = await Promise.all([
+            fetchCategoriasCosto(),
+            fetchEstadosPago(),
+          ])
+
+          const categoriasArray = Array.isArray(categoriasResponse) ? categoriasResponse : categoriasResponse?.data || []
+          const estadosPagoArray = Array.isArray(estadosPagoResponse) ? estadosPagoResponse : estadosPagoResponse?.data || []
+
+          setModalFieldOptions({
+            categoria: categoriasArray.map((cat) => ({ value: cat.id, label: cat.nombre })),
+            estado_pago: estadosPagoArray.map((estado) => ({ value: estado.id, label: estado.nombre })),
+            subcategoria: [],
+          })
+
+          setShowDynamicModal(true)
+        } catch (error) {
+          console.error('Error validando cultivo para agregar costo:', error)
+          showNotification('Error al validar el cultivo', 'error')
+        }
+      }
+
+      validateCultivo()
+    }
   }
+
+  const handleCostoFieldChange = useCallback(
+    async (name, value) => {
+      if (name === 'categoria') {
+        try {
+          const subcategoriasResponse = await fetchSubcategoriasPorCategoria(value)
+          const subcategoriasArray = Array.isArray(subcategoriasResponse) ? subcategoriasResponse : subcategoriasResponse?.data || []
+          setModalFieldOptions((prev) => ({
+            ...prev,
+            subcategoria: subcategoriasArray.map((subcat) => ({ value: subcat.id, label: subcat.nombre })),
+          }))
+        } catch (error) {
+          console.error('Error cargando subcategorías:', error)
+          showNotification('Error al cargar subcategorías', 'error')
+        }
+      }
+    },
+    [showNotification]
+  )
+
+  // for other types, open modal immediately
 
   // Abre el modal para editar un usuario existente sin diálogo extra.
   const handleOpenEditUser = (usuario) => {
@@ -971,10 +1237,88 @@ export default function AdminPanel() {
         }
         break
       }
-      case MODAL_TYPES.COSTO:
-        // Solo muestra mensaje; no hay implementación real de creación de costo aquí.
-        successMessage = `Costo de ${formData.categoria} agregado exitosamente`
+      case MODAL_TYPES.COSTO: {
+        const descripcion = formData.descripcion?.trim() || null
+        const valor = Number(String(formData.valor || '').replace(/,/g, ''))
+        const idsubcategoria = Number(formData.subcategoria)
+        const idestado_pago = Number(formData.estado_pago)
+
+        if (!selectedCultivoId) {
+          showNotification('Debes seleccionar un cultivo primero', 'error')
+          return
+        }
+
+        if (!idsubcategoria || isNaN(idsubcategoria)) {
+          showNotification('Selecciona una subcategoría válida para el costo', 'error')
+          return
+        }
+
+        if (!idestado_pago || isNaN(idestado_pago)) {
+          showNotification('Selecciona un estado de pago válido', 'error')
+          return
+        }
+
+        if (Number.isNaN(valor) || valor <= 0) {
+          showNotification('El valor debe ser un número mayor a 0', 'error')
+          return
+        }
+
+        const cultivo = cultivos.find((c) => c.id === selectedCultivoId)
+        if (!cultivo) {
+          showNotification('El cultivo seleccionado no se encontró', 'error')
+          return
+        }
+
+        if (!session?.id) {
+          showNotification('No se pudo determinar el usuario en sesión', 'error')
+          return
+        }
+
+        try {
+          const etapaEnProceso = await fetchEtapaEnProcesoPorCultivo(selectedCultivoId)
+          if (!etapaEnProceso || !Number(etapaEnProceso.idetapacultivo)) {
+            await Swal.fire({
+              title: 'AgroGestion',
+              text: 'No puede registrar el costo debido a que el cultivo no tiene etapas en proceso',
+              icon: 'warning',
+              confirmButtonText: 'Aceptar',
+              confirmButtonColor: '#dc3545',
+              cancelButtonColor: '#ffffff',
+              customClass: {
+                confirmButton: 'custom-confirm-btn',
+              },
+            })
+            return
+          }
+
+          const respuesta = await createCosto({
+            descripcion,
+            valor,
+            idcultivo: selectedCultivoId,
+            idetapa_cultivo: Number(etapaEnProceso.idetapacultivo),
+            idusuario: Number(session.id),
+            idsubcategoria,
+            idfinca: Number(cultivo.idfinca),
+            idestado_pago,
+          })
+
+          if (!respuesta || respuesta.success === false) {
+            const errorText = respuesta?.message || 'No fue posible crear el costo'
+            showNotification(errorText, 'error')
+            return
+          }
+
+          const detalle = await fetchCultivoDetalle(selectedCultivoId)
+          setDetalleCostos(Array.isArray(detalle) ? detalle : [])
+          successMessage = 'Costo agregado exitosamente'
+        } catch (error) {
+          console.error('Error creando costo:', error)
+          const errMsg = error?.response?.data?.message || 'Error al guardar el costo'
+          showNotification(errMsg, 'error')
+          return
+        }
         break
+      }
       case MODAL_TYPES.FINCA: {
         const nombre = formData.nombre?.trim()
         const departamento = formData.departamento
@@ -1002,6 +1346,12 @@ export default function AdminPanel() {
         }
         break
       }
+      case MODAL_TYPES.ETAPA: {
+          // delegate to add etapa handler which includes confirmation and API call
+          await handleSubmitAddEtapa(formData)
+          // avoid falling through to default success message
+          return
+        }
       default:
         successMessage = 'Datos agregados exitosamente'
     }
@@ -1041,16 +1391,38 @@ export default function AdminPanel() {
 
   // Detalle completo del cultivo seleccionado (cuando se hace clic en uno).
   const detalleCultivo = selectedCultivoId ? Agro.getDetalleCultivo(selectedCultivoId) : null
-  const cultivoSeleccionado = selectedCultivoId ? Agro.cultivos.find((c) => c.id === selectedCultivoId) : null
+  const cultivoSeleccionado = selectedCultivoId ? cultivos.find((c) => c.id === selectedCultivoId) : null
+  const [etapasCultivo, setEtapasCultivo] = useState([])
+  const [isLoadingEtapas, setIsLoadingEtapas] = useState(false)
+  // (replaced by DynamicModal usage)
+  const [etapasCatalog, setEtapasCatalog] = useState([])
+  const [isSavingEtapa, setIsSavingEtapa] = useState(false)
+
+  const sortEtapasOldestFirst = (etapas = []) => {
+    return [...etapas].sort((a, b) => {
+      const dateA = new Date(a.fechaInicio || a.fecha_inicio || '')
+      const dateB = new Date(b.fechaInicio || b.fecha_inicio || '')
+
+      if (!Number.isNaN(dateA) && !Number.isNaN(dateB)) {
+        return dateA - dateB
+      }
+      if (a.id != null && b.id != null) {
+        return a.id - b.id
+      }
+      return 0
+    })
+  }
+
+  const etapasCultivoOrdenadas = useMemo(() => sortEtapasOldestFirst(etapasCultivo), [etapasCultivo])
 
   // Suma los costos del cultivo seleccionado y cuenta los registros.
   const costosDetalleTotales = (() => {
-    if (!detalleCultivo?.costos) return { total: 0, count: 0 }
+    if (!detalleCostos || !detalleCostos.length) return { total: 0, count: 0 }
     let total = 0
-    detalleCultivo.costos.forEach((f) => {
-      total += Agro.parseMoney(f.valor)
+    detalleCostos.forEach((f) => {
+      total += Number(f.valor) || 0
     })
-    return { total, count: detalleCultivo.costos.length }
+    return { total, count: detalleCostos.length }
   })()
 
   // Datos para la tabla de rentabilidad en la sección de análisis.
@@ -1072,6 +1444,36 @@ export default function AdminPanel() {
       margen,
     }
   })
+
+  const etapasRows = (() => {
+    if (!etapasCultivo || etapasCultivo.length === 0) {
+      return (
+        <tr className="data-item">
+          <td colSpan={6} style={{ textAlign: 'center' }}>No hay etapas registradas</td>
+        </tr>
+      )
+    }
+
+    return etapasCultivoOrdenadas.map((etapa, i) => (
+      <tr key={i} className="data-item">
+        <td data-field="nombre">
+          <span className={`etapa-badge etapa-${etapaClassName(etapa.nombre)}`}>{etapa.nombre}</span>
+        </td>
+        <td data-field="descripcion">{etapa.descripcion}</td>
+        <td data-field="fecha-inicio">{formatDateValue(etapa.fechaInicio)}</td>
+        <td data-field="fecha-final">{formatDateValue(etapa.fechaFinal)}</td>
+        <td data-field="estado">
+          <span className={`status-badge status-${etapa.estado}`}>{etapa.estado.replace('-', ' ')}</span>
+        </td>
+        <td data-field="acciones">
+          <div className="action-buttons">
+            <button type="button" className="btn-icon btn-edit" title="Editar">✏️</button>
+            <button type="button" className="btn-icon btn-delete" title="Eliminar">🗑️</button>
+          </div>
+        </td>
+      </tr>
+    ))
+  })()
 
 
   // Cuando estamos en el dashboard, actualiza los gráficos usando el servicio adminCharts.
@@ -1132,8 +1534,19 @@ export default function AdminPanel() {
 
   useEffect(() => {
     localStorage.setItem('activeSection', activeSection)
-    setPageTitle(SECTION_TITLES[activeSection] || 'Dashboard')
-  }, [activeSection])
+    if (selectedCultivoId) {
+      localStorage.setItem('selectedCultivoId', String(selectedCultivoId))
+    } else {
+      localStorage.removeItem('selectedCultivoId')
+    }
+
+    if (activeSection === 'detalle-cultivo' && selectedCultivoId) {
+      const cultivo = cultivos.find((c) => c.id === selectedCultivoId)
+      setPageTitle(`Detalle del Cultivo: ${cultivo?.nombre || ''}`)
+    } else {
+      setPageTitle(SECTION_TITLES[activeSection] || 'Dashboard')
+    }
+  }, [activeSection, selectedCultivoId, cultivos])
 
   // Cambia la sección activa del panel y guarda la selección en localStorage.
   const switchSection = (sectionId) => {
@@ -1182,7 +1595,6 @@ export default function AdminPanel() {
   const openCultivoDetalle = (cultivo) => {
     setSelectedCultivoId(cultivo.id)
     setActiveSection('detalle-cultivo')
-    setPageTitle(`Cultivo de ${cultivo.nombre}`)
     setElementosCultivo({ open: false, rows: [] })
   }
 
@@ -1319,6 +1731,9 @@ export default function AdminPanel() {
         fieldOptions={modalFieldOptions}
         initialData={dynamicModalInitialData}
         onFieldChange={(name, value) => {
+          if (dynamicModalType === MODAL_TYPES.COSTO) {
+            handleCostoFieldChange(name, value)
+          }
           if (name === 'departamento') {
             const municipios = value ? (MUNICIPIOS_POR_DEPARTAMENTO[value] || []) : []
             setModalFieldOptions((prev) => ({
@@ -1527,11 +1942,7 @@ export default function AdminPanel() {
                 </button>
               </div>
               <button type="button" className="btn-add btn-primary" onClick={() => handleOpenFincaModal()}>
-                              title="Eliminar"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleDeleteCultivo(c.id)
-                              }}
+                + Agregar Nueva Finca
               </button>
             </div>
             <div className="table-container">
@@ -1877,17 +2288,25 @@ export default function AdminPanel() {
             {cultivoSeleccionado ? (
               <>
                 <div className="cultivo-estado-container">
-                  <label className="estado-label">Estado:</label>
-                  <span id="cultivo-estado-badge" className={`status-badge status-${cultivoSeleccionado.estado}`}>
-                    {cultivoSeleccionado.estado.replace('-', ' ').charAt(0).toUpperCase() +
-                      cultivoSeleccionado.estado.replace('-', ' ').slice(1)}
-                  </span>
+                  <label className="estado-label">Estado actual:</label>
+                  {(() => {
+                    const rawEstado = cultivoSeleccionado.estado || ''
+                    const estadoClass = rawEstado ? rawEstado.toLowerCase().replace(/\s+/g, '-') : 'desconocido'
+                    const estadoLabel = rawEstado
+                      ? rawEstado.replace(/-/g, ' ').replace(/\s+/g, ' ').trim()
+                      : '--'
+                    return (
+                      <span id="cultivo-estado-badge" className={`status-badge status-${estadoClass}`}>
+                        {estadoLabel}
+                      </span>
+                    )
+                  })()}
                 </div>
 
                 <div className="info-section" id="etapas-section">
                   <div className="section-info-header">
                     <h3>Etapas</h3>
-                    <button type="button" className="btn-add btn-primary">
+                    <button type="button" className="btn-add btn-primary" onClick={openAddEtapaModal}>
                       + Agregar Nueva Etapa
                     </button>
                   </div>
@@ -1923,32 +2342,11 @@ export default function AdminPanel() {
                         </tr>
                       </thead>
                       <tbody>
-                        {(detalleCultivo?.etapas || []).map((etapa, i) => (
-                          <tr key={i} className="data-item">
-                            <td data-field="nombre">
-                              <span className={`etapa-badge etapa-${etapaClassName(etapa.nombre)}`}>{etapa.nombre}</span>
-                            </td>
-                            <td data-field="descripcion">{etapa.descripcion}</td>
-                            <td data-field="fecha-inicio">{etapa.fechaInicio}</td>
-                            <td data-field="fecha-final">{etapa.fechaFinal}</td>
-                            <td data-field="estado">
-                              <span className={`status-badge status-${etapa.estado}`}>{etapa.estado.replace('-', ' ')}</span>
-                            </td>
-                            <td data-field="acciones">
-                              <div className="action-buttons">
-                                <button type="button" className="btn-icon btn-edit" title="Editar">
-                                  ✏️
-                                </button>
-                                <button type="button" className="btn-icon btn-delete" title="Eliminar">
-                                  🗑️
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
+                        {etapasRows}
                       </tbody>
                     </table>
                   </div>
+                  {/* DynamicModal will be used instead of inline modal */}
                 </div>
 
                 <div className="info-section" id="cosechas-section">
@@ -2051,57 +2449,128 @@ export default function AdminPanel() {
                     <table className="data-table costos-table">
                       <thead>
                         <tr className="table-title-row">
-                          <th colSpan={7}>Costos Registrados del Cultivo</th>
+                          <th colSpan={9}>Costos Registrados del Cultivo</th>
                         </tr>
                         <tr>
                           <th>Fecha</th>
                           <th>Usuario</th>
                           <th>Categoría</th>
+                          <th>Subcategoría</th>
                           <th>Etapa</th>
-                          <th>Descripción</th>
+                          <th>Info Adicional</th>
                           <th>Valor</th>
+                          <th>Estado</th>
                           <th>Acciones</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {(detalleCultivo?.costos || []).map((costo, i) => {
-                          const isMp = costo.categoria === 'Materia Prima'
-                          return (
-                            <tr
-                              key={i}
-                              className={`data-item ${isMp ? 'clickeable-materia-prima' : ''}`}
-                              style={{ cursor: isMp ? 'pointer' : undefined }}
-                              onClick={(e) => {
-                                if (!isMp) return
-                                if (e.target.closest('.action-buttons')) return
-                                setElementosCultivo({ open: true, rows: getInventarioElementos(costo.descripcion, 'cultivo') })
-                                setTimeout(
-                                  () => document.getElementById('elementos-inventario-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
-                                  100,
-                                )
-                              }}
-                            >
-                              <td data-field="fecha">{costo.fecha}</td>
-                              <td data-field="usuario">{costo.usuario}</td>
-                              <td data-field="categoria">
-                                <span className={`categoria-badge cat-${costo.categoria.toLowerCase().replace(/ /g, '-')}`}>{costo.categoria}</span>
-                              </td>
-                              <td data-field="etapa">{costo.etapa}</td>
-                              <td data-field="descripcion">{costo.descripcion}</td>
-                              <td data-field="valor">{costo.valor}</td>
-                              <td data-field="acciones">
-                                <div className="action-buttons">
-                                  <button type="button" className="btn-icon btn-edit" title="Editar">
-                                    ✏️
-                                  </button>
-                                  <button type="button" className="btn-icon btn-delete" title="Eliminar">
-                                    🗑️
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        })}
+                        {isLoadingDetalleCostos ? (
+                          <tr>
+                            <td colSpan={9} style={{ textAlign: 'center', padding: '20px' }}>
+                              Cargando costos del cultivo...
+                            </td>
+                          </tr>
+                        ) : detalleCostos.length === 0 ? (
+                          <tr>
+                            <td colSpan={9} style={{ textAlign: 'center', padding: '20px' }}>
+                              No hay costos registrados para este cultivo.
+                            </td>
+                          </tr>
+                        ) : (
+                          detalleCostos.map((costo, i) => {
+                            const isMp = costo.categoria === 'Materia Prima'
+                            const pagoEstado = costo.estado_pago || costo.estado || 'Pendiente'
+                            const estadoLower = String(pagoEstado || 'pendiente').toLowerCase().replace(/\s+/g, '-')
+                            const estadoLabel = String(pagoEstado || 'Pendiente').replace(/-/g, ' ').replace(/\s+/g, ' ').trim()
+                            const parseMonetaryString = (s) => {
+                              if (s == null) return NaN
+                              let str = String(s).trim()
+                              // keep digits, dots, commas, minus
+                              str = str.replace(/[^0-9.,-]/g, '')
+                              if (str.indexOf('.') !== -1 && str.indexOf(',') !== -1) {
+                                // assume format like 6.000,00 -> remove thousand dots, convert comma to dot
+                                str = str.replace(/\./g, '').replace(/,/g, '.')
+                              } else if (str.indexOf(',') !== -1) {
+                                // assume comma is decimal separator
+                                str = str.replace(/,/g, '.')
+                              }
+                              const n = Number(str)
+                              return Number.isFinite(n) ? n : NaN
+                            }
+
+                            let valorNum = null
+                            if (typeof costo.valor === 'number') {
+                              valorNum = costo.valor
+                            } else if (typeof costo.valor === 'string') {
+                              const parsed = parseMonetaryString(costo.valor)
+                              if (!Number.isNaN(parsed)) valorNum = parsed
+                            }
+                            const valorTexto = valorNum != null ? Agro.formatCOP(valorNum) : (costo.valor || '--')
+                            return (
+                              <tr
+                                key={costo.id || i}
+                                className={`data-item ${isMp ? 'clickeable-materia-prima' : ''}`}
+                                style={{ cursor: isMp ? 'pointer' : undefined }}
+                                onClick={(e) => {
+                                  if (!isMp) return
+                                  if (e.target.closest('.action-buttons')) return
+                                  setElementosCultivo({ open: true, rows: getInventarioElementos(costo.descripcion, 'cultivo') })
+                                  setTimeout(
+                                    () => document.getElementById('elementos-inventario-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+                                    100,
+                                  )
+                                }}
+                              >
+                                <td data-field="fecha">{formatDateValue(costo.fecha)}</td>
+                                <td data-field="usuario">{costo.usuario || '--'}</td>
+                                <td data-field="categoria">
+                                  {(() => {
+                                    const rawCat = costo.categoria || 'Sin categoría'
+                                    const norm = normalizeKey(rawCat)
+                                    const matchedKey = CATEGORY_MAP[norm]
+                                    const displayCat = matchedKey || rawCat
+                                    return (
+                                      <span className={`dc-categoria-badge cat-${normalizeKey(displayCat).replace(/\s+/g, '-')}`}>
+                                        {displayCat}
+                                      </span>
+                                    )
+                                  })()}
+                                </td>
+                                <td data-field="subcategoria">
+                                  {(() => {
+                                    return (
+                                      <span className={`dc-subcategoria-badge sub-cat-${normalizeKey(costo.subcategoria || 'sin-subcategoria').replace(/\s+/g, '-')}`}>
+                                        {costo.subcategoria || '--'}
+                                      </span>
+                                    )
+                                  })()}
+                                </td>
+                                <td data-field="etapa">
+                                  <span className={`etapa-badge`} style={{ backgroundColor: '#ff9800', color: '#fff', padding: '6px 10px', borderRadius: '8px', display: 'inline-block' }}>
+                                    {costo.etapa || '--'}
+                                  </span>
+                                </td>
+                                <td data-field="descripcion">{costo.descripcion || '--'}</td>
+                                <td data-field="valor">{valorTexto}</td>
+                                <td data-field="estado">
+                                  <span className={`status-badge status-${estadoLower}`}>
+                                    {estadoLabel}
+                                  </span>
+                                </td>
+                                <td data-field="acciones">
+                                  <div className="action-buttons">
+                                    <button type="button" className="btn-icon btn-edit" title="Editar">
+                                      ✏️
+                                    </button>
+                                    <button type="button" className="btn-icon btn-delete" title="Eliminar">
+                                      🗑️
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          })
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -2350,7 +2819,7 @@ export default function AdminPanel() {
                       >
                         <td data-field="fecha">{row.fecha}</td>
                         <td data-field="categoria">
-                          <span className={`categoria-badge cat-${row.categoria.toLowerCase().replace(/ /g, '-')}`}>{row.categoria}</span>
+                          <span className={`cg-categoria-badge cat-${normalizeKey(row.categoria).replace(/\s+/g, '-')}`}>{row.categoria}</span>
                         </td>
                         <td data-field="descripcion">{row.descripcion}</td>
                         <td data-field="monto">{row.monto}</td>

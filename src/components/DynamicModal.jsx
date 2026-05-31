@@ -359,6 +359,7 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
                   onBlur={() => setFocusedField(null)}
                   placeholder={field.placeholder}
                   rows="4"
+                  maxLength={field.maxLength || undefined}
                   style={{
                     width: '100%',
                     padding: '12px 16px',
@@ -392,6 +393,7 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
                     onFocus={() => setFocusedField(field.name)}
                     onBlur={() => setFocusedField(null)}
                     placeholder={field.placeholder}
+                    maxLength={field.maxLength || undefined}
                     style={{
                       width: '100%',
                       padding: field.type === 'password' ? '12px 45px 12px 16px' : '12px 16px',

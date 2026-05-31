@@ -48,11 +48,11 @@
     --status-finalizado: #27ae60;
     --status-cancelado: #e74c3c;
     
-    /* Colores de Categorías */
-    --cat-mano-obra: #e74c3c;
-    --cat-materia-prima: #16a085;
-    --cat-servicios: #8e44ad;
-    --cat-costos-indirectos: #d35400;
+    /* Colores de Categorías (sincronizados con frontend JS CATEGORY_COLORS) */
+    --cat-mano-obra: #2E7D32; /* verde oscuro */
+    --cat-materia-prima: #1565C0; /* azul */
+    --cat-servicios: #6A1B9A; /* morado */
+    --cat-costos-indirectos: #FF6F00; /* naranja oscuro */
     
     /* Colores de Etapas */
     --etapa-color: #f39c12;
@@ -961,10 +961,16 @@ html, body {
     box-shadow: 0 2px 8px var(--status-cancelado-transparent);
 }
 
-.status-pendiente {
-    background-color: var(--warning);
+.status-pagado {
+    background-color: #27ae60;
     color: var(--text-white);
-    box-shadow: 0 2px 8px var(--status-pausa-transparent);
+    box-shadow: 0 2px 8px rgba(39, 174, 96, 0.25);
+}
+
+.status-pendiente {
+    background-color: #3498db;
+    color: var(--text-white);
+    box-shadow: 0 2px 8px rgba(52, 152, 219, 0.25);
 }
 
 /* Sección de Detalle de Cultivo */
@@ -1095,12 +1101,12 @@ html, body {
 
 .etapa-badge {
     display: inline-block;
-    padding: 8px 16px;
-    border-radius: 20px;
+    padding: 6px 10px; /* same as category badges */
+    border-radius: 8px;  /* same rounded corners as categories */
     font-size: 0.85em;
     font-weight: 600;
     text-align: center;
-    min-width: 110px;
+    min-width: auto;
     letter-spacing: 0.3px;
     text-transform: capitalize;
 }
@@ -1156,16 +1162,46 @@ html, body {
 
 /* Estilo compartido para tablas de costos */
 
-.costos-table .categoria-badge,
+.costos-table .categoria-badge {
+    display: inline-block;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 0.85em;
+    font-weight: 600;
+    text-align: center;
+    color: var(--text-white);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.costos-table .subcategoria-badge {
+    display: inline-block;
+    padding: 5px 9px;
+    border-radius: 6px;
+    font-size: 0.82em;
+    font-weight: 600;
+    color: var(--text-dark);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
 .costos-generales-table .categoria-badge {
-    display: inline-block !important;
-    padding: 8px 16px !important;
-    border-radius: 20px !important;
-    font-size: 0.85em !important;
-    font-weight: 600 !important;
-    text-align: center !important;
-    min-width: 120px;
-    color: var(--text-white) !important;
+    display: inline-block;
+    padding: 8px 12px;
+    border-radius: 12px;
+    font-size: 0.9em;
+    font-weight: 700;
+    text-align: center;
+    color: var(--text-white);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+
+.costos-generales-table .subcategoria-badge {
+    display: inline-block;
+    padding: 6px 10px;
+    border-radius: 10px;
+    font-size: 0.85em;
+    font-weight: 600;
+    color: var(--text-dark);
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.10);
 }
 
 .costos-table .categoria-badge.cat-mano-obra,
@@ -1195,6 +1231,30 @@ html, body {
     background-color: var(--cat-costos-indirectos) !important;
     color: var(--text-white) !important;
     box-shadow: 0 2px 8px var(--cat-costos-indirectos-shadow) !important;
+}
+
+.costos-table .subcategoria-badge.sub-cat-mano-obra,
+.costos-generales-table .subcategoria-badge.sub-cat-mano-obra {
+    background-color: rgba(46,125,50,0.12) !important;
+    color: #145a22 !important;
+}
+
+.costos-table .subcategoria-badge.sub-cat-materia-prima,
+.costos-generales-table .subcategoria-badge.sub-cat-materia-prima {
+    background-color: rgba(21,101,192,0.12) !important;
+    color: #083a63 !important;
+}
+
+.costos-table .subcategoria-badge.sub-cat-servicios,
+.costos-generales-table .subcategoria-badge.sub-cat-servicios {
+    background-color: rgba(106,27,154,0.12) !important;
+    color: #3e0f52 !important;
+}
+
+.costos-table .subcategoria-badge.sub-cat-costos-indirectos,
+.costos-generales-table .subcategoria-badge.sub-cat-costos-indirectos {
+    background-color: rgba(255,111,0,0.12) !important;
+    color: #663f00 !important;
 }
 
 /* Aliases para categorías con espacios reemplazados */

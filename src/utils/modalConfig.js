@@ -8,6 +8,7 @@ export const MODAL_TYPES = {
   CULTIVO: 'cultivo',
   COSTO: 'costo',
   FINCA: 'finca',
+  ETAPA: 'etapa',
 }
 
 export const CATEGORIAS_COSTO = [
@@ -135,29 +136,36 @@ export const getModalConfig = (type) => {
           name: 'categoria',
           label: 'Categoría',
           type: 'select',
-          options: CATEGORIAS_COSTO.map((cat) => ({ value: cat, label: cat })),
+          options: [],
+          required: true,
+        },
+        {
+          name: 'subcategoria',
+          label: 'Subcategoría',
+          type: 'select',
+          options: [],
           required: true,
         },
         {
           name: 'descripcion',
-          label: 'Descripción (Opcional)',
+          label: 'Info Adicional (Opcional)',
           type: 'textarea',
-          placeholder: 'Ej: Compra de fertilizante NPK 15-15-15',
+          placeholder: 'Máximo 100 caracteres',
+          maxLength: 100,
           required: false,
         },
         {
-          name: 'monto',
-          label: 'Monto',
+          name: 'valor',
+          label: 'Valor (COP)',
           type: 'number',
           placeholder: 'Ej: 50000',
           required: true,
         },
         {
-          name: 'estado',
-          label: 'Estado',
+          name: 'estado_pago',
+          label: 'Estado de Pago',
           type: 'select',
-          options: ESTADO_COSTO,
-          defaultValue: 'pendiente',
+          options: [],
           required: true,
         },
       ],
@@ -186,6 +194,27 @@ export const getModalConfig = (type) => {
           type: 'select',
           options: [], // se cargan dinámicamente según departamento seleccionado
           required: true,
+        },
+      ],
+    },
+    [MODAL_TYPES.ETAPA]: {
+      title: 'Agregar Nueva Etapa',
+      submitButtonText: 'Agregar Etapa',
+      fields: [
+        {
+          name: 'idetapa',
+          label: 'Etapa',
+          type: 'select',
+          options: [],
+          required: true,
+        },
+        {
+          name: 'descripcion',
+          label: 'Descripción (Opcional)',
+          type: 'textarea',
+          placeholder: 'Máximo 100 caracteres',
+          maxLength: 100,
+          required: false,
         },
       ],
     },
@@ -233,6 +262,10 @@ export const validateField = (field, value) => {
     if (isNaN(value) || Number(value) <= 0) {
       return 'El monto debe ser un número mayor a 0'
     }
+  }
+
+  if (field.maxLength && typeof value === 'string' && value.length > field.maxLength) {
+    return `${field.label} debe tener máximo ${field.maxLength} caracteres`
   }
 
   return null

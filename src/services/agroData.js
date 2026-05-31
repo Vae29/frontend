@@ -17,11 +17,11 @@ export function parseDateDDMMYYYY(ddmmyyyy) {
 }
 
 export function formatCOP(value) {
+  const n = Number(value) || 0
   return new Intl.NumberFormat('es-CO', {
-    style: 'currency',
-    currency: 'COP',
-    minimumFractionDigits: 0,
-  }).format(value)
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(n)
 }
 
 export const fincas = [
