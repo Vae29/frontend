@@ -100,14 +100,14 @@ export async function validateCultivoForCost(cultivoId) {
 
 export async function createCosto({ descripcion, valor, idcultivo, idetapa_cultivo, idusuario, idsubcategoria, idfinca, idestado_pago }) {
   const response = await httpClient.post('/api/costos', {
-    descripcion,
-    valor,
-    idcultivo,
-    idetapa_cultivo,
-    idusuario,
-    idsubcategoria,
-    idfinca,
-    idestado_pago,
-  });
-  return response.data;
+    descripcion: descripcion?.trim() || null,
+    valor: Number(valor),
+    idcultivo: Number(idcultivo),
+    idetapa_cultivo: Number(idetapa_cultivo),
+    idusuario: Number(idusuario),
+    idsubcategoria: Number(idsubcategoria),
+    idfinca: Number(idfinca),
+    idestado_pago: Number(idestado_pago),
+  })
+  return response.data
 }
