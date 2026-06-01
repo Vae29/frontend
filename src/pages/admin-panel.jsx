@@ -15,7 +15,7 @@ import '../styles/dashboard.css'
 import '../styles/admin-panel.css'
 import { fetchFincas, createFinca, updateFinca, deleteFinca } from '../services/fincaService'
 import { fetchDashboardForFinca } from '../services/dashboardService'
-import { fetchCultivosPorFinca, fetchTiposCultivo, fetchEstados, createCultivo, updateCultivo, deleteCultivo, fetchCultivoDetalle, fetchCategoriasCosto, fetchSubcategoriasPorCategoria, fetchEstadosPago, fetchEtapaEnProcesoPorCultivo, fetchEtapasPorCultivo, validateCultivoForCost, createCosto, fetchAllEtapasCatalog, createEtapaForCultivo, updateEtapaForCultivo, deleteEtapaForCultivo } from '../services/cultivoService'
+import { fetchCultivosPorFinca, fetchTiposCultivo, fetchEstados, createCultivo, updateCultivo, deleteCultivo, fetchCultivoDetalle, fetchCategoriasCosto, fetchSubcategoriasPorCategoria, fetchEstadosPago, fetchUnidadesMedida, fetchTiposPrecio, fetchEtapaEnProcesoPorCultivo, fetchEtapasPorCultivo, validateCultivoForCost, createCosto, updateCosto, deleteCosto, fetchCosechasPorCultivo, createCosecha, updateCosecha, deleteCosecha, fetchAllEtapasCatalog, createEtapaForCultivo, updateEtapaForCultivo, deleteEtapaForCultivo } from '../services/cultivoService'
 import * as reportService from '../services/reportService'
 
 import { MODAL_TYPES, DEPARTAMENTOS, MUNICIPIOS_POR_DEPARTAMENTO } from '../utils/modalConfig'
@@ -57,6 +57,79 @@ function formatDateValue(value) {
   const parsedDate = new Date(value)
   if (Number.isNaN(parsedDate.getTime())) return value
   return parsedDate.toISOString().slice(0, 10)
+}
+
+function formatCantidadValue(value) {
+  if (value === null || value === undefined || value === '') return ''
+  const parsed = Number(String(value).replace(/,/g, '.'))
+  if (Number.isNaN(parsed)) return String(value)
+  return parsed.toLocaleString('es-CO', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 6,
+  })
+}
+
+function formatPrecioValue(value) {
+  if (value === null || value === undefined || value === '') return ''
+  const parsed = Number(String(value).replace(/[^0-9.-]/g, ''))
+  if (Number.isNaN(parsed)) return String(value)
+  return new Intl.NumberFormat('es-CO', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(parsed)
+}
+
+function normalizeNumericInputValue(value) {
+  if (value === null || value === undefined || value === '') return ''
+  const normalized = String(value).trim().replace(/,/g, '.')
+  const parsed = Number(normalized)
+  if (Number.isNaN(parsed)) return normalized
+  return Number.isInteger(parsed) ? String(parsed) : String(parsed)
+}
+
+function normalizeSelectValue(value) {
+  if (value === null || value === undefined) return ''
+  return String(value)
+}
+
+function normalizeCosecha(cosecha) {
+  if (!cosecha || typeof cosecha !== 'object') return cosecha
+  const unidadId =
+    cosecha.unidadId ??
+    cosecha.unidadMedidaId ??
+    cosecha.unidadmedidaid ??
+    cosecha.idunidadmedida ??
+    cosecha.unidad_medida ??
+    cosecha.unidad?.id ??
+    ''
+  const tipoPrecioId =
+    cosecha.tipoPrecioId ??
+    cosecha.tipoprecioid ??
+    cosecha.idtipo_precio ??
+    cosecha.tipo_precio ??
+    ''
+  const unidadLabel =
+    cosecha.unidad ||
+    cosecha.unidad_medida ||
+    cosecha.unidad?.nombre ||
+    cosecha.unidadMedida ||
+    ''
+  const tipoPrecioLabel =
+    cosecha.tipoPrecio ||
+    cosecha.tipoprecio ||
+    cosecha.tipo_precio ||
+    (cosecha.tipoPrecio && typeof cosecha.tipoPrecio === 'object' ? cosecha.tipoPrecio.nombre : '') ||
+    ''
+
+  return {
+    ...cosecha,
+    cantidad: cosecha.cantidad ?? cosecha.cantidad_cosechada ?? '',
+    precio: cosecha.precio ?? cosecha.precio_unitario ?? '',
+    unidad_medida: normalizeSelectValue(unidadId),
+    tipo_precio: normalizeSelectValue(tipoPrecioId),
+    unidad: unidadLabel,
+    tipoPrecio: tipoPrecioLabel,
+  }
 }
 
 function formatDateForInput(value) {
@@ -247,6 +320,21 @@ export default function AdminPanel() {
   const [editingCultivo, setEditingCultivo] = useState(null)
   const [detalleCostos, setDetalleCostos] = useState([])
   const [isLoadingDetalleCostos, setIsLoadingDetalleCostos] = useState(false)
+  const [editingCosto, setEditingCosto] = useState(null)
+  const [costoFilterEtapa, setCostoFilterEtapa] = useState('todos')
+  const [costoFilterCategoria, setCostoFilterCategoria] = useState('todos')
+  const [costoFilterEstadoPago, setCostoFilterEstadoPago] = useState('todos')
+  const [costoFilterFechaDesde, setCostoFilterFechaDesde] = useState('')
+  const [costoFilterFechaHasta, setCostoFilterFechaHasta] = useState('')
+  const [costoCategoriaOptions, setCostoCategoriaOptions] = useState([])
+  const [costoEstadoPagoOptions, setCostoEstadoPagoOptions] = useState([])
+  const [detalleCosechas, setDetalleCosechas] = useState([])
+  const [isLoadingDetalleCosechas, setIsLoadingDetalleCosechas] = useState(false)
+  const [editingCosecha, setEditingCosecha] = useState(null)
+  const [cosechaFilterFechaDesde, setCosechaFilterFechaDesde] = useState('')
+  const [cosechaFilterFechaHasta, setCosechaFilterFechaHasta] = useState('')
+  const [cosechaUnidadOptions, setCosechaUnidadOptions] = useState([])
+  const [cosechaTipoPrecioOptions, setCosechaTipoPrecioOptions] = useState([])
 
   // Memoize initial data for DynamicModal to avoid recreating object each render
   const memoizedModalInitialData = useMemo(() => {
@@ -381,6 +469,66 @@ export default function AdminPanel() {
     loadAssignmentOptions()
   }, [])
 
+  useEffect(() => {
+    const loadCostoOptions = async () => {
+      try {
+        const [categoriasResponse, estadosPagoResponse] = await Promise.all([
+          fetchCategoriasCosto(),
+          fetchEstadosPago(),
+        ])
+
+        const categoriasArray = categoriasResponse?.success
+          ? categoriasResponse.data
+          : Array.isArray(categoriasResponse)
+          ? categoriasResponse
+          : categoriasResponse?.data || []
+
+        const estadosPagoArray = estadosPagoResponse?.success
+          ? estadosPagoResponse.data
+          : Array.isArray(estadosPagoResponse)
+          ? estadosPagoResponse
+          : estadosPagoResponse?.data || []
+
+        setCostoCategoriaOptions(categoriasArray)
+        setCostoEstadoPagoOptions(estadosPagoArray)
+      } catch (error) {
+        console.error('Error cargando opciones de costos:', error)
+      }
+    }
+
+    loadCostoOptions()
+  }, [])
+
+  useEffect(() => {
+    const loadCosechaOptions = async () => {
+      try {
+        const [unidadesResponse, tiposPrecioResponse] = await Promise.all([
+          fetchUnidadesMedida(),
+          fetchTiposPrecio(),
+        ])
+
+        const unidadesArray = unidadesResponse?.success
+          ? unidadesResponse.data
+          : Array.isArray(unidadesResponse)
+          ? unidadesResponse
+          : unidadesResponse?.data || []
+
+        const tiposPrecioArray = tiposPrecioResponse?.success
+          ? tiposPrecioResponse.data
+          : Array.isArray(tiposPrecioResponse)
+          ? tiposPrecioResponse
+          : tiposPrecioResponse?.data || []
+
+        setCosechaUnidadOptions(unidadesArray)
+        setCosechaTipoPrecioOptions(tiposPrecioArray)
+      } catch (error) {
+        console.error('Error cargando opciones de cosechas:', error)
+      }
+    }
+
+    loadCosechaOptions()
+  }, [])
+
   // Muestra una notificación rápida en pantalla.
   const showNotification = useCallback((message, type = 'info') => {
     setToast({ message, type })
@@ -450,6 +598,39 @@ export default function AdminPanel() {
     }
 
     loadDetalleCostos()
+  }, [selectedCultivoId])
+
+  useEffect(() => {
+    if (!selectedCultivoId) {
+      setDetalleCosechas([])
+      setIsLoadingDetalleCosechas(false)
+      return
+    }
+
+    const loadDetalleCosechas = async () => {
+      try {
+        setIsLoadingDetalleCosechas(true)
+        const detalle = await fetchCosechasPorCultivo(selectedCultivoId)
+        setDetalleCosechas(Array.isArray(detalle) ? detalle.map(normalizeCosecha) : [])
+      } catch (error) {
+        console.error('Error cargando cosechas del cultivo:', error)
+        setDetalleCosechas([])
+      } finally {
+        setIsLoadingDetalleCosechas(false)
+      }
+    }
+
+    loadDetalleCosechas()
+  }, [selectedCultivoId])
+
+  useEffect(() => {
+    setCostoFilterEtapa('todos')
+    setCostoFilterCategoria('todos')
+    setCostoFilterEstadoPago('todos')
+    setCostoFilterFechaDesde('')
+    setCostoFilterFechaHasta('')
+    setCosechaFilterFechaDesde('')
+    setCosechaFilterFechaHasta('')
   }, [selectedCultivoId])
 
   const openAddEtapaModal = async () => {
@@ -714,7 +895,7 @@ export default function AdminPanel() {
 
     const confirmed = await Swal.fire({
       title: '¿Eliminar etapa?',
-      text: 'Si esta etapa tiene costos asociados, se desactivará en lugar de eliminarse permanentemente.',
+      text: '¿Seguro que deseas eliminar esta etapa? ',
       icon: 'warning',
       showCancelButton: true,
       confirmButtonText: 'Sí, eliminar',
@@ -969,11 +1150,17 @@ export default function AdminPanel() {
   )
 
   const filteredCultivos = useMemo(() => {
-    return cultivos.filter((cultivo) => {
+    const filtered = cultivos.filter((cultivo) => {
       const cumpleEstado = !filtroEstadoCultivo || filtroEstadoCultivo === 'todos' || Number(cultivo.idestado) === Number(filtroEstadoCultivo)
       const cultivoNombre = String(cultivo.nombre || '')
       const cumpleBusqueda = !searchCultivoTerm || cultivoNombre.toLowerCase().includes(searchCultivoTerm.toLowerCase())
       return cumpleEstado && cumpleBusqueda
+    })
+
+    return filtered.sort((a, b) => {
+      const fechaA = new Date(a.fechaInicio || a.fecha_inicio || a.fechainicio || '')
+      const fechaB = new Date(b.fechaInicio || b.fecha_inicio || b.fechainicio || '')
+      return fechaA - fechaB
     })
   }, [cultivos, filtroEstadoCultivo, searchCultivoTerm])
 
@@ -1025,6 +1212,7 @@ export default function AdminPanel() {
     setEditingUser(null)
     setEditingFinca(null)
     setEditingCultivo(null)
+    setEditingCosto(null)
     setModalInitialData({})
     setDynamicModalType(type)
 
@@ -1112,6 +1300,8 @@ export default function AdminPanel() {
     if (type !== MODAL_TYPES.USUARIO && type !== MODAL_TYPES.CULTIVO && type !== MODAL_TYPES.COSTO) setShowDynamicModal(true)
 
     if (type === MODAL_TYPES.COSTO) {
+      setEditingCosto(null)
+
       if (!selectedCultivoId) {
         await Swal.fire({
           title: 'AgroGestion',
@@ -1132,10 +1322,10 @@ export default function AdminPanel() {
         try {
           const validation = await validateCultivoForCost(selectedCultivoId)
           if (!validation.valid) {
-            if (validation.reason === 'no_etapa_en_proceso') {
+            if (validation.reason === 'no_active_etapa_en_proceso' || validation.reason === 'no_etapa_en_proceso') {
               await Swal.fire({
                 title: 'AgroGestion',
-                text: 'No puede registrar el costo debido a que el cultivo no tiene etapas en proceso',
+                text: 'No puede registrar el costo porque el cultivo no tiene una etapa activa en proceso',
                 icon: 'warning',
                 confirmButtonText: 'Aceptar',
                 confirmButtonColor: '#dc3545',
@@ -1168,14 +1358,21 @@ export default function AdminPanel() {
             return
           }
 
-          // Cargar categorías y estados de pago
-          const [categoriasResponse, estadosPagoResponse] = await Promise.all([
-            fetchCategoriasCosto(),
-            fetchEstadosPago(),
-          ])
+          let categoriasArray = costoCategoriaOptions
+          if (!categoriasArray.length) {
+            const categoriasResponse = await fetchCategoriasCosto()
+            categoriasArray = Array.isArray(categoriasResponse)
+              ? categoriasResponse
+              : categoriasResponse?.data || []
+          }
 
-          const categoriasArray = Array.isArray(categoriasResponse) ? categoriasResponse : categoriasResponse?.data || []
-          const estadosPagoArray = Array.isArray(estadosPagoResponse) ? estadosPagoResponse : estadosPagoResponse?.data || []
+          let estadosPagoArray = costoEstadoPagoOptions
+          if (!estadosPagoArray.length) {
+            const estadosPagoResponse = await fetchEstadosPago()
+            estadosPagoArray = Array.isArray(estadosPagoResponse)
+              ? estadosPagoResponse
+              : estadosPagoResponse?.data || []
+          }
 
           setModalFieldOptions({
             categoria: categoriasArray.map((cat) => ({ value: cat.id, label: cat.nombre })),
@@ -1184,7 +1381,6 @@ export default function AdminPanel() {
           })
 
           setModalInitialData({})
-
           setShowDynamicModal(true)
         } catch (error) {
           console.error('Error validando cultivo para agregar costo:', error)
@@ -1214,6 +1410,200 @@ export default function AdminPanel() {
     },
     [showNotification]
   )
+
+  const handleOpenEditCosto = async (costo) => {
+    setEditingUser(null)
+    setEditingFinca(null)
+    setEditingCultivo(null)
+    setEditingCosto(costo)
+    setDynamicModalType(MODAL_TYPES.COSTO)
+
+    try {
+      let categoriasArray = costoCategoriaOptions
+      if (!categoriasArray.length) {
+        const categoriasResponse = await fetchCategoriasCosto()
+        categoriasArray = Array.isArray(categoriasResponse) ? categoriasResponse : categoriasResponse?.data || []
+      }
+
+      let estadosPagoArray = costoEstadoPagoOptions
+      if (!estadosPagoArray.length) {
+        const estadosPagoResponse = await fetchEstadosPago()
+        estadosPagoArray = Array.isArray(estadosPagoResponse) ? estadosPagoResponse : estadosPagoResponse?.data || []
+      }
+
+      const categoriaId = costo.categoriaId || null
+      let subcategoriasArray = []
+      if (categoriaId) {
+        const subcategoriasResponse = await fetchSubcategoriasPorCategoria(categoriaId)
+        subcategoriasArray = Array.isArray(subcategoriasResponse) ? subcategoriasResponse : subcategoriasResponse?.data || []
+      }
+
+      setModalFieldOptions({
+        categoria: categoriasArray.map((cat) => ({ value: cat.id, label: cat.nombre })),
+        estado_pago: estadosPagoArray.map((estado) => ({ value: estado.id, label: estado.nombre })),
+        subcategoria: subcategoriasArray.map((subcat) => ({ value: subcat.id, label: subcat.nombre })),
+      })
+
+      setModalInitialData({
+        categoria: costo.categoriaId || '',
+        subcategoria: costo.subcategoriaId || '',
+        descripcion: costo.descripcion || '',
+        valor: costo.valor || '',
+        estado_pago: costo.estadoPagoId || '',
+      })
+      setShowDynamicModal(true)
+    } catch (error) {
+      console.error('Error abriendo modal de edición de costo:', error)
+      showNotification('Error al preparar la edición del costo', 'error')
+    }
+  }
+
+  const handleDeleteCosto = async (costo) => {
+    const result = await Swal.fire({
+      title: 'Eliminar Costo',
+      text: '¿Seguro que deseas eliminar este costo? Esta acción no se puede deshacer.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#dc3545',
+      cancelButtonColor: '#ffffff',
+      customClass: {
+        cancelButton: 'custom-cancel-btn',
+        confirmButton: 'custom-confirm-btn',
+      },
+    })
+
+    if (!result.isConfirmed) return
+
+    try {
+      const response = await deleteCosto(costo.id)
+      if (!response.success) {
+        showNotification(response.message || 'No se pudo eliminar el costo', 'error')
+        return
+      }
+      setDetalleCostos((prev) => prev.filter((item) => item.id !== costo.id))
+      showNotification('Costo eliminado exitosamente', 'success')
+    } catch (error) {
+      console.error('Error eliminando costo:', error)
+      const errMsg = error?.response?.data?.message || 'Error al eliminar el costo'
+      showNotification(errMsg, 'error')
+    }
+  }
+
+  const handleOpenAgregarCosecha = async () => {
+    if (!selectedCultivoId) {
+      await Swal.fire({
+        title: 'AgroGestion',
+        text: 'Selecciona un cultivo primero.',
+        icon: 'warning',
+        confirmButtonText: 'Aceptar',
+        confirmButtonColor: '#dc3545',
+      })
+      return
+    }
+
+    try {
+      const etapas = await fetchEtapasPorCultivo(selectedCultivoId)
+      const hasCosechaActiva = Array.isArray(etapas)
+        ? etapas.some(
+            (etapa) =>
+              String(etapa.nombre || etapa.nombre_etapa || '').trim().toLowerCase() === 'cosecha' &&
+              String(etapa.estado || etapa.nombre_estado || '').trim().toLowerCase() === 'en proceso' &&
+              (etapa.activo === true || String(etapa.activo).toLowerCase() === 'true')
+          )
+        : false
+
+      if (!hasCosechaActiva) {
+        await Swal.fire({
+          title: 'AgroGestion',
+          text: 'No puedes agregar cosechas a este cultivo porque no tiene una etapa de cosecha activa en proceso.',
+          icon: 'warning',
+          confirmButtonText: 'Aceptar',
+          confirmButtonColor: '#dc3545',
+        })
+        return
+      }
+
+      const unidadesResponse = cosechaUnidadOptions.length ? cosechaUnidadOptions : await fetchUnidadesMedida()
+      const unidadesArray = Array.isArray(unidadesResponse) ? unidadesResponse : unidadesResponse?.data || []
+      const tiposPrecioResponse = cosechaTipoPrecioOptions.length ? cosechaTipoPrecioOptions : await fetchTiposPrecio()
+      const tiposPrecioArray = Array.isArray(tiposPrecioResponse) ? tiposPrecioResponse : tiposPrecioResponse?.data || []
+
+      setModalFieldOptions({
+        unidad_medida: unidadesArray.map((unidad) => ({ value: unidad.id, label: unidad.nombre })),
+        tipo_precio: tiposPrecioArray.map((tipo) => ({ value: tipo.id, label: tipo.nombre })),
+      })
+      setEditingCosecha(null)
+      setModalInitialData({ cantidad: '', unidad_medida: '', precio: '', tipo_precio: '' })
+      setDynamicModalType(MODAL_TYPES.COSECHA)
+      setShowDynamicModal(true)
+    } catch (error) {
+      console.error('Error preparando el modal de cosecha:', error)
+      showNotification('Error al preparar el modal de cosecha', 'error')
+    }
+  }
+
+  const handleOpenEditCosecha = async (cosecha) => {
+    try {
+      const unidadesResponse = cosechaUnidadOptions.length ? cosechaUnidadOptions : await fetchUnidadesMedida()
+      const unidadesArray = Array.isArray(unidadesResponse) ? unidadesResponse : unidadesResponse?.data || []
+      const tiposPrecioResponse = cosechaTipoPrecioOptions.length ? cosechaTipoPrecioOptions : await fetchTiposPrecio()
+      const tiposPrecioArray = Array.isArray(tiposPrecioResponse) ? tiposPrecioResponse : tiposPrecioResponse?.data || []
+
+      setModalFieldOptions({
+        unidad_medida: unidadesArray.map((unidad) => ({ value: unidad.id, label: unidad.nombre })),
+        tipo_precio: tiposPrecioArray.map((tipo) => ({ value: tipo.id, label: tipo.nombre })),
+      })
+
+      const cosechaData = normalizeCosecha(cosecha)
+      setEditingCosecha(cosechaData)
+      setModalInitialData({
+        cantidad: normalizeNumericInputValue(cosechaData.cantidad),
+        unidad_medida: normalizeSelectValue(cosechaData.unidad_medida),
+        precio: normalizeNumericInputValue(cosechaData.precio),
+        tipo_precio: normalizeSelectValue(cosechaData.tipo_precio),
+      })
+      setDynamicModalType(MODAL_TYPES.COSECHA)
+      setShowDynamicModal(true)
+    } catch (error) {
+      console.error('Error preparando la edición de cosecha:', error)
+      showNotification('Error al preparar la edición de cosecha', 'error')
+    }
+  }
+
+  const handleDeleteCosecha = async (cosecha) => {
+    const result = await Swal.fire({
+      title: 'Eliminar Cosecha',
+      text: '¿Seguro que deseas eliminar esta cosecha? Esta acción no se puede deshacer.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#dc3545',
+      cancelButtonColor: '#ffffff',
+      customClass: {
+        cancelButton: 'custom-cancel-btn',
+        confirmButton: 'custom-confirm-btn',
+      },
+    })
+
+    if (!result.isConfirmed) return
+
+    try {
+      const response = await deleteCosecha(cosecha.id)
+      if (!response.success) {
+        showNotification(response.message || 'No se pudo eliminar la cosecha', 'error')
+        return
+      }
+      setDetalleCosechas((prev) => prev.filter((item) => item.id !== cosecha.id))
+      showNotification('Cosecha eliminada exitosamente', 'success')
+    } catch (error) {
+      console.error('Error eliminando cosecha:', error)
+      const errMsg = error?.response?.data?.message || 'Error al eliminar la cosecha'
+      showNotification(errMsg, 'error')
+    }
+  }
 
   // for other types, open modal immediately
 
@@ -1277,9 +1667,12 @@ export default function AdminPanel() {
     setShowDynamicModal(false)
     setDynamicModalType(null)
     setEditingUser(null)
+    setModalInitialData({})
     setModalFieldOptions({})
     setEditingCultivo(null)
     setEditingEtapa(null)
+    setEditingCosto(null)
+    setEditingCosecha(null)
   }
 
   // Elimina un usuario después de pedir confirmación.
@@ -1488,8 +1881,8 @@ export default function AdminPanel() {
           return
         }
 
-        if (Number.isNaN(valor) || valor <= 0) {
-          showNotification('El valor debe ser un número mayor a 0', 'error')
+        if (Number.isNaN(valor) || valor <= 0 || valor > 100000000000) {
+          showNotification('El valor debe ser un monto COP válido mayor a 0', 'error')
           return
         }
 
@@ -1505,54 +1898,141 @@ export default function AdminPanel() {
         }
 
         try {
-          let etapaEnProceso = await fetchEtapaEnProcesoPorCultivo(selectedCultivoId)
-          let etapaId = etapaEnProceso?.idetapacultivo ? Number(etapaEnProceso.idetapacultivo) : null
-
-          if (!etapaId) {
-            const etapasResponse = await fetchEtapasPorCultivo(selectedCultivoId)
-            const etapasArray = Array.isArray(etapasResponse) ? etapasResponse : etapasResponse?.data || []
-            const fallbackEtapa = etapasArray[0]
-            etapaId = fallbackEtapa?.id || null
-          }
-
-          if (!etapaId) {
-            await Swal.fire({
-              title: 'AgroGestion',
-              text: 'No puede registrar el costo porque el cultivo no tiene etapas disponibles',
-              icon: 'warning',
-              confirmButtonText: 'Aceptar',
-              confirmButtonColor: '#dc3545',
-              cancelButtonColor: '#ffffff',
-              customClass: {
-                confirmButton: 'custom-confirm-btn',
-              },
+          if (editingCosto) {
+            const response = await updateCosto(editingCosto.id, {
+              descripcion,
+              valor,
+              idsubcategoria,
+              idestado_pago,
             })
-            return
-          }
 
-          const respuesta = await createCosto({
-            descripcion,
-            valor,
-            idcultivo: selectedCultivoId,
-            idetapa_cultivo: etapaId,
-            idusuario: Number(session.id),
-            idsubcategoria,
-            idfinca: Number(cultivo.idfinca),
-            idestado_pago,
-          })
+            if (!response || response.success === false) {
+              const errorText = response?.message || 'No fue posible actualizar el costo'
+              showNotification(errorText, 'error')
+              return
+            }
 
-          if (!respuesta || respuesta.success === false) {
-            const errorText = respuesta?.message || 'No fue posible crear el costo'
-            showNotification(errorText, 'error')
-            return
+            successMessage = 'Costo actualizado exitosamente'
+            setEditingCosto(null)
+          } else {
+            const etapaEnProceso = await fetchEtapaEnProcesoPorCultivo(selectedCultivoId)
+            const etapaId = etapaEnProceso?.idetapacultivo ? Number(etapaEnProceso.idetapacultivo) : null
+
+            if (!etapaId) {
+              await Swal.fire({
+                title: 'AgroGestion',
+                text: 'No puede registrar el costo porque el cultivo no tiene una etapa activa en proceso',
+                icon: 'warning',
+                confirmButtonText: 'Aceptar',
+                confirmButtonColor: '#dc3545',
+                cancelButtonColor: '#ffffff',
+                customClass: {
+                  confirmButton: 'custom-confirm-btn',
+                },
+              })
+              return
+            }
+
+            const respuesta = await createCosto({
+              descripcion,
+              valor,
+              idcultivo: selectedCultivoId,
+              idetapa_cultivo: etapaId,
+              idusuario: Number(session.id),
+              idsubcategoria,
+              idfinca: Number(cultivo.idfinca),
+              idestado_pago,
+            })
+
+            if (!respuesta || respuesta.success === false) {
+              const errorText = respuesta?.message || 'No fue posible crear el costo'
+              showNotification(errorText, 'error')
+              return
+            }
+
+            successMessage = 'Costo agregado exitosamente'
           }
 
           const detalle = await fetchCultivoDetalle(selectedCultivoId)
           setDetalleCostos(Array.isArray(detalle) ? detalle : [])
-          successMessage = 'Costo agregado exitosamente'
         } catch (error) {
-          console.error('Error creando costo:', error)
+          console.error('Error guardando costo:', error)
           const errMsg = error?.response?.data?.message || 'Error al guardar el costo'
+          showNotification(errMsg, 'error')
+          return
+        }
+        break
+      }
+      case MODAL_TYPES.COSECHA: {
+        const cantidad = Number(formData.cantidad)
+        const idunidadmedida = Number(formData.unidad_medida)
+        const precio = Number(formData.precio)
+        const idtipo_precio = Number(formData.tipo_precio)
+
+        if (!Number.isFinite(cantidad) || cantidad < 0) {
+          showNotification('La cantidad debe ser un número válido mayor o igual a 0', 'error')
+          return
+        }
+
+        if (!idunidadmedida || Number.isNaN(idunidadmedida)) {
+          showNotification('Selecciona una unidad de medida válida', 'error')
+          return
+        }
+
+        if (!Number.isFinite(precio) || precio < 0) {
+          showNotification('El precio debe ser un número válido mayor o igual a 0', 'error')
+          return
+        }
+
+        if (!idtipo_precio || Number.isNaN(idtipo_precio)) {
+          showNotification('Selecciona un tipo de precio válido', 'error')
+          return
+        }
+
+        if (!selectedCultivoId) {
+          showNotification('Selecciona un cultivo primero', 'error')
+          return
+        }
+
+        try {
+          if (editingCosecha) {
+            const response = await updateCosecha(editingCosecha.id, {
+              cantidad,
+              idunidadmedida,
+              precio,
+              idtipo_precio,
+            })
+
+            if (!response || response.success === false) {
+              const errorText = response?.message || 'No fue posible actualizar la cosecha'
+              showNotification(errorText, 'error')
+              return
+            }
+
+            successMessage = 'Cosecha actualizada exitosamente'
+            setEditingCosecha(null)
+          } else {
+            const response = await createCosecha(selectedCultivoId, {
+              cantidad,
+              idunidadmedida,
+              precio,
+              idtipo_precio,
+            })
+
+            if (!response || response.success === false) {
+              const errorText = response?.message || 'No fue posible crear la cosecha'
+              showNotification(errorText, 'error')
+              return
+            }
+
+            successMessage = 'Cosecha agregada exitosamente'
+          }
+
+          const detalle = await fetchCosechasPorCultivo(selectedCultivoId)
+          setDetalleCosechas(Array.isArray(detalle) ? detalle.map(normalizeCosecha) : [])
+        } catch (error) {
+          console.error('Error guardando cosecha:', error)
+          const errMsg = error?.response?.data?.message || 'Error al guardar la cosecha'
           showNotification(errMsg, 'error')
           return
         }
@@ -1647,18 +2127,10 @@ export default function AdminPanel() {
 
   const sortEtapasForDisplay = (etapas = []) => {
     return [...etapas].sort((a, b) => {
-      const estadoA = String(a.estado || '').toLowerCase()
-      const estadoB = String(b.estado || '').toLowerCase()
-      const aEnProceso = estadoA === 'en proceso'
-      const bEnProceso = estadoB === 'en proceso'
-
-      if (aEnProceso && !bEnProceso) return -1
-      if (!aEnProceso && bEnProceso) return 1
-
       const dateA = new Date(a.fechaInicio || a.fecha_inicio || '')
       const dateB = new Date(b.fechaInicio || b.fecha_inicio || '')
       if (!Number.isNaN(dateA) && !Number.isNaN(dateB)) {
-        return dateB - dateA
+        return dateA - dateB
       }
       if (a.id != null && b.id != null) {
         return a.id - b.id
@@ -1670,14 +2142,96 @@ export default function AdminPanel() {
   const etapasCultivoOrdenadas = useMemo(() => sortEtapasForDisplay(etapasCultivo), [etapasCultivo])
 
   // Suma los costos del cultivo seleccionado y cuenta los registros.
-  const costosDetalleTotales = (() => {
-    if (!detalleCostos || !detalleCostos.length) return { total: 0, count: 0 }
-    let total = 0
-    detalleCostos.forEach((f) => {
-      total += Number(f.valor) || 0
+  const detallesCostosOrdenados = useMemo(() => {
+    if (!detalleCostos || !detalleCostos.length) return []
+    return [...detalleCostos].sort((a, b) => {
+      const fechaA = new Date(a.fecha || '')
+      const fechaB = new Date(b.fecha || '')
+      if (!Number.isNaN(fechaA) && !Number.isNaN(fechaB)) return fechaA - fechaB
+      if (a.id != null && b.id != null) return a.id - b.id
+      return 0
     })
-    return { total, count: detalleCostos.length }
-  })()
+  }, [detalleCostos])
+
+  const costoEtapaOptions = useMemo(() => {
+    const uniqueEtapas = new Set()
+    return etapasCultivo
+      .map((etapa) => etapa.nombre)
+      .filter(Boolean)
+      .reduce((acc, etapaNombre) => {
+        if (!uniqueEtapas.has(etapaNombre)) {
+          uniqueEtapas.add(etapaNombre)
+          acc.push({ value: etapaNombre, label: etapaNombre })
+        }
+        return acc
+      }, [])
+  }, [etapasCultivo])
+
+  const visibleCostos = useMemo(() => {
+    if (!detallesCostosOrdenados || !detallesCostosOrdenados.length) return []
+
+    let filtered = [...detallesCostosOrdenados]
+
+    if (costoFilterEtapa && costoFilterEtapa !== 'todos') {
+      filtered = filtered.filter((costo) => String(costo.etapa || '').trim() === String(costoFilterEtapa).trim())
+    }
+
+    if (costoFilterCategoria && costoFilterCategoria !== 'todos') {
+      filtered = filtered.filter((costo) => String(costo.categoria || '').trim() === String(costoFilterCategoria).trim())
+    }
+
+    if (costoFilterEstadoPago && costoFilterEstadoPago !== 'todos') {
+      filtered = filtered.filter((costo) => String(costo.estado_pago || '').trim() === String(costoFilterEstadoPago).trim())
+    }
+
+    if (costoFilterFechaDesde) {
+      const desde = new Date(costoFilterFechaDesde)
+      if (!Number.isNaN(desde.getTime())) {
+        filtered = filtered.filter((costo) => {
+          const fecha = new Date(costo.fecha || '')
+          return !Number.isNaN(fecha.getTime()) && fecha >= desde
+        })
+      }
+    }
+
+    if (costoFilterFechaHasta) {
+      const hasta = new Date(costoFilterFechaHasta)
+      if (!Number.isNaN(hasta.getTime())) {
+        filtered = filtered.filter((costo) => {
+          const fecha = new Date(costo.fecha || '')
+          return !Number.isNaN(fecha.getTime()) && fecha <= hasta
+        })
+      }
+    }
+
+    return filtered
+  }, [detallesCostosOrdenados, costoFilterEtapa, costoFilterCategoria, costoFilterEstadoPago, costoFilterFechaDesde, costoFilterFechaHasta])
+
+  const costosDetalleTotales = useMemo(() => {
+    if (!visibleCostos || !visibleCostos.length) return { total: 0, count: 0 }
+    const total = visibleCostos.reduce((acc, f) => acc + (Number(f.valor) || 0), 0)
+    return { total, count: visibleCostos.length }
+  }, [visibleCostos])
+
+  const filteredCosechas = useMemo(() => {
+    if (!detalleCosechas || !detalleCosechas.length) return []
+    return detalleCosechas.filter((cosecha) => {
+      const fecha = new Date(cosecha.fechaCosecha || cosecha.fecha_cosecha || cosecha.fechacosecha || cosecha.fecha || '')
+      if (cosechaFilterFechaDesde) {
+        const desde = new Date(cosechaFilterFechaDesde)
+        if (Number.isNaN(desde.getTime()) || Number.isNaN(fecha.getTime()) || fecha < desde) {
+          return false
+        }
+      }
+      if (cosechaFilterFechaHasta) {
+        const hasta = new Date(cosechaFilterFechaHasta)
+        if (Number.isNaN(hasta.getTime()) || Number.isNaN(fecha.getTime()) || fecha > hasta) {
+          return false
+        }
+      }
+      return true
+    })
+  }, [detalleCosechas, cosechaFilterFechaDesde, cosechaFilterFechaHasta])
 
   // Datos para la tabla de rentabilidad en la sección de análisis.
   const rentabilidadRows = (dashboardData?.rentability || []).map((row) => {
@@ -1986,10 +2540,12 @@ export default function AdminPanel() {
       <DynamicModal
         isOpen={showDynamicModal}
         modalType={dynamicModalType}
-        isEditing={Boolean(editingUser || editingFinca || editingCultivo || editingEtapa)}
+        isEditing={Boolean(editingUser || editingFinca || editingCultivo || editingEtapa || editingCosto || editingCosecha)}
         onClose={handleCloseDynamicModal}
         onSubmit={handleSubmitDynamicModal}
         title={
+          editingCosecha ? 'Editar Cosecha' :
+          editingCosto ? 'Editar costo' :
           editingFinca ? 'Editar Finca' :
           editingCultivo ? 'Editar Cultivo' :
           editingUser ? 'Editar Usuario' :
@@ -1997,6 +2553,8 @@ export default function AdminPanel() {
           undefined
         }
         submitButtonText={
+          editingCosecha ? 'Actualizar Cosecha' :
+          editingCosto ? 'Actualizar costo' :
           editingFinca ? 'Actualizar Finca' :
           editingCultivo ? 'Actualizar Cultivo' :
           editingUser ? 'Actualizar Usuario' :
@@ -2686,14 +3244,28 @@ export default function AdminPanel() {
                 <div className="info-section" id="cosechas-section">
                   <div className="section-info-header">
                     <h3>Cosechas</h3>
-                    <button type="button" className="btn-add btn-primary">
+                    <button type="button" className="btn-add btn-primary" onClick={handleOpenAgregarCosecha} disabled={!selectedCultivoId}>
                       + Agregar Nueva Cosecha
                     </button>
                   </div>
                   <div className="search-filter-wrapper">
                     <div className="filter-wrapper">
-                      <label className="filter-label">Filtrar por fecha:</label>
-                      <input type="date" className="filter-date" readOnly />
+                      <label className="filter-label">Desde:</label>
+                      <input
+                        type="date"
+                        className="filter-date"
+                        value={cosechaFilterFechaDesde}
+                        onChange={(e) => setCosechaFilterFechaDesde(e.target.value)}
+                      />
+                    </div>
+                    <div className="filter-wrapper">
+                      <label className="filter-label">Hasta:</label>
+                      <input
+                        type="date"
+                        className="filter-date"
+                        value={cosechaFilterFechaHasta}
+                        onChange={(e) => setCosechaFilterFechaHasta(e.target.value)}
+                      />
                     </div>
                   </div>
                   <div className="table-container">
@@ -2712,25 +3284,39 @@ export default function AdminPanel() {
                         </tr>
                       </thead>
                       <tbody>
-                        {(detalleCultivo?.cosechas || []).map((cosecha, i) => (
-                          <tr key={i} className="data-item">
-                            <td data-field="fecha">{cosecha.fecha}</td>
-                            <td data-field="cantidad">{cosecha.cantidad}</td>
-                            <td data-field="unidad">{cosecha.unidad}</td>
-                            <td data-field="precio">{cosecha.precio}</td>
-                            <td data-field="tipo-precio">{cosecha.tipoPrecio}</td>
-                            <td data-field="acciones">
-                              <div className="action-buttons">
-                                <button type="button" className="btn-icon btn-edit" title="Editar">
-                                  ✏️
-                                </button>
-                                <button type="button" className="btn-icon btn-delete" title="Eliminar">
-                                  🗑️
-                                </button>
-                              </div>
+                        {isLoadingDetalleCosechas ? (
+                          <tr className="data-item">
+                            <td colSpan={6} style={{ textAlign: 'center' }}>
+                              Cargando cosechas...
                             </td>
                           </tr>
-                        ))}
+                        ) : filteredCosechas.length === 0 ? (
+                          <tr className="data-item">
+                            <td colSpan={6} style={{ textAlign: 'center' }}>
+                              No hay cosechas registradas
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredCosechas.map((cosecha, i) => (
+                            <tr key={cosecha.id ?? i} className="data-item">
+                              <td data-field="fecha">{formatDateValue(cosecha.fechaCosecha || cosecha.fecha_cosecha || cosecha.fechacosecha || cosecha.fecha)}</td>
+                              <td data-field="cantidad">{formatCantidadValue(cosecha.cantidad || cosecha.cantidad_cosechada)}</td>
+                              <td data-field="unidad">{cosecha.unidad || cosecha.unidad_medida || cosecha.unidad?.nombre || cosecha.unidadMedida}</td>
+                              <td data-field="precio">{formatPrecioValue(cosecha.precio || cosecha.precio_unitario)}</td>
+                              <td data-field="tipo-precio">{cosecha.tipoPrecio || cosecha.tipoprecio || cosecha.tipoPrecio?.nombre || cosecha.tipo_precio || cosecha.tipoPrecioId || cosecha.tipoprecioid || ''}</td>
+                              <td data-field="acciones">
+                                <div className="action-buttons">
+                                  <button type="button" className="btn-icon btn-edit" title="Editar" onClick={() => handleOpenEditCosecha(cosecha)}>
+                                    ✏️
+                                  </button>
+                                  <button type="button" className="btn-icon btn-delete" title="Eliminar" onClick={() => handleDeleteCosecha(cosecha)}>
+                                    🗑️
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -2746,26 +3332,65 @@ export default function AdminPanel() {
                   <div className="search-filter-wrapper">
                     <div className="filter-wrapper">
                       <label className="filter-label">Filtrar por etapa:</label>
-                      <select className="filter-select filter-etapa-cultivo" defaultValue="todos">
+                      <select
+                        className="filter-select filter-etapa-cultivo"
+                        value={costoFilterEtapa}
+                        onChange={(e) => setCostoFilterEtapa(e.target.value)}
+                      >
                         <option value="todos">Todos</option>
+                        {costoEtapaOptions.map((etapa) => (
+                          <option key={etapa.value} value={etapa.value}>
+                            {etapa.label}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div className="filter-wrapper">
                       <label className="filter-label">Filtrar por categoría:</label>
-                      <select className="filter-select filter-categoria-cultivo" defaultValue="todos">
+                      <select
+                        className="filter-select filter-categoria-cultivo"
+                        value={costoFilterCategoria}
+                        onChange={(e) => setCostoFilterCategoria(e.target.value)}
+                      >
                         <option value="todos">Todos</option>
-                        <option value="costos-indirectos">Costos Indirectos</option>
-                        <option value="mano-obra">Mano de Obra</option>
-                        <option value="materia-prima">Materia Prima</option>
-                        <option value="servicios">Servicios</option>
+                        {costoCategoriaOptions.map((categoria) => (
+                          <option key={categoria.id} value={categoria.nombre}>
+                            {categoria.nombre}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="filter-wrapper">
+                      <label className="filter-label">Estado de pago:</label>
+                      <select
+                        className="filter-select filter-estado-pago-cultivo"
+                        value={costoFilterEstadoPago}
+                        onChange={(e) => setCostoFilterEstadoPago(e.target.value)}
+                      >
+                        <option value="todos">Todos</option>
+                        {costoEstadoPagoOptions.map((estado) => (
+                          <option key={estado.id} value={estado.nombre}>
+                            {estado.nombre}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div className="filter-wrapper" style={{ width: '100%' }}>
                       <label className="filter-label">Rango de fechas:</label>
                       <div className="date-range">
-                        <input type="date" className="filter-date filter-fecha-desde-cultivo" readOnly />
+                        <input
+                          type="date"
+                          className="filter-date filter-fecha-desde-cultivo"
+                          value={costoFilterFechaDesde}
+                          onChange={(e) => setCostoFilterFechaDesde(e.target.value)}
+                        />
                         <span className="date-separator">-</span>
-                        <input type="date" className="filter-date filter-fecha-hasta-cultivo" readOnly />
+                        <input
+                          type="date"
+                          className="filter-date filter-fecha-hasta-cultivo"
+                          value={costoFilterFechaHasta}
+                          onChange={(e) => setCostoFilterFechaHasta(e.target.value)}
+                        />
                       </div>
                     </div>
                   </div>
@@ -2804,14 +3429,20 @@ export default function AdminPanel() {
                               Cargando costos del cultivo...
                             </td>
                           </tr>
-                        ) : detalleCostos.length === 0 ? (
+                        ) : detallesCostosOrdenados.length === 0 ? (
                           <tr>
                             <td colSpan={9} style={{ textAlign: 'center', padding: '20px' }}>
                               No hay costos registrados para este cultivo.
                             </td>
                           </tr>
+                        ) : visibleCostos.length === 0 ? (
+                          <tr>
+                            <td colSpan={9} style={{ textAlign: 'center', padding: '20px' }}>
+                              No se encontraron costos con los filtros aplicados.
+                            </td>
+                          </tr>
                         ) : (
-                          detalleCostos.map((costo, i) => {
+                          visibleCostos.map((costo, i) => {
                             const isMp = costo.categoria === 'Materia Prima'
                             const pagoEstado = costo.estado_pago || costo.estado || 'Pendiente'
                             const estadoLower = String(pagoEstado || 'pendiente').toLowerCase().replace(/\s+/g, '-')
@@ -2919,10 +3550,26 @@ export default function AdminPanel() {
                                 </td>
                                 <td data-field="acciones">
                                   <div className="action-buttons">
-                                    <button type="button" className="btn-icon btn-edit" title="Editar">
+                                    <button
+                                      type="button"
+                                      className="btn-icon btn-edit"
+                                      title="Editar"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleOpenEditCosto(costo)
+                                      }}
+                                    >
                                       ✏️
                                     </button>
-                                    <button type="button" className="btn-icon btn-delete" title="Eliminar">
+                                    <button
+                                      type="button"
+                                      className="btn-icon btn-delete"
+                                      title="Eliminar"
+                                      onClick={async (e) => {
+                                        e.stopPropagation()
+                                        await handleDeleteCosto(costo)
+                                      }}
+                                    >
                                       🗑️
                                     </button>
                                   </div>

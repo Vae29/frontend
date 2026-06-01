@@ -59,6 +59,16 @@ export async function fetchEstadosPago() {
   return response.data?.data ?? response.data;
 }
 
+export async function fetchUnidadesMedida() {
+  const response = await httpClient.get('/api/unidades-medida');
+  return response.data?.data ?? response.data;
+}
+
+export async function fetchTiposPrecio() {
+  const response = await httpClient.get('/api/tipos-precio');
+  return response.data?.data ?? response.data;
+}
+
 export async function fetchEtapaEnProcesoPorCultivo(cultivoId) {
   const response = await httpClient.get(`/api/cultivos/${cultivoId}/etapa-en-proceso`);
   return response.data?.data ?? response.data;
@@ -114,5 +124,50 @@ export async function createCosto({ descripcion, valor, idcultivo, idetapa_culti
     idfinca: Number(idfinca),
     idestado_pago: Number(idestado_pago),
   })
+  return response.data
+}
+
+export async function updateCosto(idcosto, { descripcion, valor, idsubcategoria, idestado_pago }) {
+  const response = await httpClient.put(`/api/costos/${idcosto}`, {
+    descripcion: descripcion?.trim() || null,
+    valor: Number(valor),
+    idsubcategoria: Number(idsubcategoria),
+    idestado_pago: Number(idestado_pago),
+  })
+  return response.data
+}
+
+export async function deleteCosto(idcosto) {
+  const response = await httpClient.delete(`/api/costos/${idcosto}`)
+  return response.data
+}
+
+export async function fetchCosechasPorCultivo(cultivoId) {
+  const response = await httpClient.get(`/api/cultivos/${cultivoId}/cosechas`)
+  return response.data?.data ?? response.data
+}
+
+export async function createCosecha(cultivoId, { cantidad, idunidadmedida, precio, idtipo_precio }) {
+  const response = await httpClient.post(`/api/cultivos/${cultivoId}/cosechas`, {
+    cantidad,
+    idunidadmedida,
+    precio,
+    idtipo_precio,
+  })
+  return response.data
+}
+
+export async function updateCosecha(idcosecha, { cantidad, idunidadmedida, precio, idtipo_precio }) {
+  const response = await httpClient.put(`/api/cosechas/${idcosecha}`, {
+    cantidad,
+    idunidadmedida,
+    precio,
+    idtipo_precio,
+  })
+  return response.data
+}
+
+export async function deleteCosecha(idcosecha) {
+  const response = await httpClient.delete(`/api/cosechas/${idcosecha}`)
   return response.data
 }

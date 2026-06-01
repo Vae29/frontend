@@ -7,6 +7,7 @@ export const MODAL_TYPES = {
   USUARIO: 'usuario',
   CULTIVO: 'cultivo',
   COSTO: 'costo',
+  COSECHA: 'cosecha',
   FINCA: 'finca',
   ETAPA: 'etapa',
 }
@@ -170,6 +171,42 @@ export const getModalConfig = (type) => {
         },
       ],
     },
+    [MODAL_TYPES.COSECHA]: {
+      title: 'Agregar nueva cosecha',
+      submitButtonText: 'Agregar cosecha',
+      fields: [
+        {
+          name: 'cantidad',
+          label: 'Cantidad Cosechada',
+          type: 'number',
+          placeholder: 'Ej: 100',
+          required: true,
+          min: 0,
+        },
+        {
+          name: 'unidad_medida',
+          label: 'Unidad de medida',
+          type: 'select',
+          options: [],
+          required: true,
+        },
+        {
+          name: 'precio',
+          label: 'Precio (COP)',
+          type: 'number',
+          placeholder: 'Ej: 2500',
+          required: true,
+          min: 0,
+        },
+        {
+          name: 'tipo_precio',
+          label: 'Tipo de precio',
+          type: 'select',
+          options: [],
+          required: true,
+        },
+      ],
+    },
     [MODAL_TYPES.FINCA]: {
       title: 'Agregar Nueva Finca',
       submitButtonText: 'Agregar Finca',
@@ -267,9 +304,13 @@ export const validateField = (field, value) => {
     }
   }
 
-  if (field.type === 'number' && value) {
-    if (isNaN(value) || Number(value) <= 0) {
-      return 'El monto debe ser un número mayor a 0'
+  if (field.type === 'number' && value !== undefined && value !== null && value !== '') {
+    const numericValue = Number(value)
+    const minValue = field.min !== undefined ? Number(field.min) : 1
+    if (isNaN(numericValue) || numericValue < minValue) {
+      return minValue === 0
+        ? `El valor debe ser un número válido mayor o igual a 0`
+        : `El monto debe ser un número mayor a 0`
     }
   }
 
