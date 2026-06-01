@@ -15,7 +15,7 @@ import '../styles/dashboard.css'
 import '../styles/admin-panel.css'
 import { fetchFincas, createFinca, updateFinca, deleteFinca } from '../services/fincaService'
 import { fetchDashboardForFinca } from '../services/dashboardService'
-import { fetchCultivosPorFinca, fetchTiposCultivo, fetchEstados, createCultivo, updateCultivo, deleteCultivo, fetchCultivoDetalle, fetchCategoriasCosto, fetchSubcategoriasPorCategoria, fetchEstadosPago, fetchEtapaEnProcesoPorCultivo, fetchEtapasPorCultivo, validateCultivoForCost, createCosto, fetchAllEtapasCatalog, createEtapaForCultivo, updateEtapaForCultivo } from '../services/cultivoService'
+import { fetchCultivosPorFinca, fetchTiposCultivo, fetchEstados, createCultivo, updateCultivo, deleteCultivo, fetchCultivoDetalle, fetchCategoriasCosto, fetchSubcategoriasPorCategoria, fetchEstadosPago, fetchEtapaEnProcesoPorCultivo, fetchEtapasPorCultivo, validateCultivoForCost, createCosto, fetchAllEtapasCatalog, createEtapaForCultivo, updateEtapaForCultivo, deleteEtapaForCultivo } from '../services/cultivoService'
 import * as reportService from '../services/reportService'
 
 import { MODAL_TYPES, DEPARTAMENTOS, MUNICIPIOS_POR_DEPARTAMENTO } from '../utils/modalConfig'
@@ -88,6 +88,31 @@ function normalizeKey(str) {
 const CATEGORY_MAP = Object.fromEntries(
   Object.keys(CATEGORY_COLORS).map((k) => [normalizeKey(k), k])
 )
+
+const MONTH_OPTIONS = [
+  { value: '', label: 'Todos los meses' },
+  { value: '1', label: 'Enero' },
+  { value: '2', label: 'Febrero' },
+  { value: '3', label: 'Marzo' },
+  { value: '4', label: 'Abril' },
+  { value: '5', label: 'Mayo' },
+  { value: '6', label: 'Junio' },
+  { value: '7', label: 'Julio' },
+  { value: '8', label: 'Agosto' },
+  { value: '9', label: 'Septiembre' },
+  { value: '10', label: 'Octubre' },
+  { value: '11', label: 'Noviembre' },
+  { value: '12', label: 'Diciembre' },
+]
+
+const CURRENT_YEAR = new Date().getFullYear()
+const YEAR_OPTIONS = [
+  { value: '', label: 'Todos los años' },
+  ...Array.from({ length: 15 }, (_, index) => ({
+    value: String(CURRENT_YEAR - index),
+    label: String(CURRENT_YEAR - index),
+  })),
+]
 
 function lightenHex(hex, percent) {
   try {
@@ -214,6 +239,8 @@ export default function AdminPanel() {
   const [dashboardData, setDashboardData] = useState(null)
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(false)
   const [dashboardError, setDashboardError] = useState(null)
+  const [dashboardMonth, setDashboardMonth] = useState('')
+  const [dashboardYear, setDashboardYear] = useState('')
   const [cultivos, setCultivos] = useState([])
   const [isLoadingCultivos, setIsLoadingCultivos] = useState(false)
   const [editingFinca, setEditingFinca] = useState(null)
@@ -360,13 +387,16 @@ export default function AdminPanel() {
   }, [])
 
     const fetchDashboardData = useCallback(
-    async (selectedFincaId) => {
+    async (selectedFincaId, month, year) => {
       if (!selectedFincaId) return
       const fincaNumericId = Number(selectedFincaId)
       if (!Number.isInteger(fincaNumericId) || fincaNumericId <= 0) return
       try {
         setIsLoadingDashboard(true)
-        const data = await fetchDashboardForFinca(fincaNumericId)
+        const data = await fetchDashboardForFinca(fincaNumericId, {
+          month,
+          year,
+        })
         setDashboardData(data)
         setDashboardError(null)
       } catch (error) {
@@ -486,7 +516,7 @@ export default function AdminPanel() {
       if (res && res.success) {
         showNotification('Etapa registrada correctamente', 'success')
         const updated = await fetchEtapasPorCultivo(selectedCultivoId)
-        setEtapasCultivo(sortEtapasOldestFirst(Array.isArray(updated) ? updated : []))
+        setEtapasCultivo(sortEtapasForDisplay(Array.isArray(updated) ? updated : []))
         // close DynamicModal
         setShowDynamicModal(false)
         setDynamicModalType(null)
@@ -514,7 +544,7 @@ export default function AdminPanel() {
       try {
         setIsLoadingEtapas(true)
         const list = await fetchEtapasPorCultivo(selectedCultivoId)
-        setEtapasCultivo(sortEtapasOldestFirst(Array.isArray(list) ? list : []))
+        setEtapasCultivo(sortEtapasForDisplay(Array.isArray(list) ? list : []))
       } catch (e) {
         console.error('Error cargando etapas del cultivo:', e)
         setEtapasCultivo([])
@@ -651,7 +681,7 @@ export default function AdminPanel() {
       if (res && res.success) {
         showNotification('Etapa actualizada correctamente', 'success')
         const updated = await fetchEtapasPorCultivo(selectedCultivoId)
-        setEtapasCultivo(sortEtapasOldestFirst(Array.isArray(updated) ? updated : []))
+        setEtapasCultivo(sortEtapasForDisplay(Array.isArray(updated) ? updated : []))
         setShowDynamicModal(false)
         setDynamicModalType(null)
         setEditingEtapa(null)
@@ -665,6 +695,54 @@ export default function AdminPanel() {
       showNotification(message, 'error')
     } finally {
       setIsSavingEtapa(false)
+    }
+  }
+
+  const handleDeleteEtapa = async (etapa) => {
+    const etapaId = Number(
+      etapa?.id ??
+      etapa?.idetapacultivo ??
+      etapa?.idetapa_cultivo ??
+      etapa?.idEtapaCultivo
+    )
+
+    if (!etapaId || Number.isNaN(etapaId)) {
+      console.error('ID de etapa inválido al eliminar etapa:', etapa)
+      showNotification('ID de etapa inválido para eliminar', 'error')
+      return
+    }
+
+    const confirmed = await Swal.fire({
+      title: '¿Eliminar etapa?',
+      text: 'Si esta etapa tiene costos asociados, se desactivará en lugar de eliminarse permanentemente.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#dc3545',
+      cancelButtonColor: '#ffffff',
+      customClass: {
+        cancelButton: 'custom-cancel-btn',
+        confirmButton: 'custom-confirm-btn',
+      },
+    })
+
+    if (!confirmed.isConfirmed) return
+
+    try {
+      const res = await deleteEtapaForCultivo(etapaId)
+      if (res && res.success) {
+        showNotification(res.message || 'Etapa eliminada correctamente', 'success')
+        const updated = await fetchEtapasPorCultivo(selectedCultivoId)
+        setEtapasCultivo(sortEtapasForDisplay(Array.isArray(updated) ? updated : []))
+      } else {
+        console.error('Error eliminando etapa:', res)
+        showNotification(res?.message || 'Error eliminando etapa', 'error')
+      }
+    } catch (error) {
+      console.error('Error eliminando etapa:', error)
+      const message = error?.response?.data?.message || error?.message || 'Error eliminando etapa'
+      showNotification(message, 'error')
     }
   }
 
@@ -698,8 +776,8 @@ export default function AdminPanel() {
   }, [searchTerm, fetchFincasList, fincasRefresh])
 
   useEffect(() => {
-    fetchDashboardData(fincaId)
-  }, [fincaId, fincasRefresh, fetchDashboardData])
+    fetchDashboardData(fincaId, dashboardMonth, dashboardYear)
+  }, [fincaId, fincasRefresh, dashboardMonth, dashboardYear, fetchDashboardData])
 
   useEffect(() => {
     fetchCultivosData(fincaId)
@@ -1105,6 +1183,8 @@ export default function AdminPanel() {
             subcategoria: [],
           })
 
+          setModalInitialData({})
+
           setShowDynamicModal(true)
         } catch (error) {
           console.error('Error validando cultivo para agregar costo:', error)
@@ -1425,11 +1505,20 @@ export default function AdminPanel() {
         }
 
         try {
-          const etapaEnProceso = await fetchEtapaEnProcesoPorCultivo(selectedCultivoId)
-          if (!etapaEnProceso || !Number(etapaEnProceso.idetapacultivo)) {
+          let etapaEnProceso = await fetchEtapaEnProcesoPorCultivo(selectedCultivoId)
+          let etapaId = etapaEnProceso?.idetapacultivo ? Number(etapaEnProceso.idetapacultivo) : null
+
+          if (!etapaId) {
+            const etapasResponse = await fetchEtapasPorCultivo(selectedCultivoId)
+            const etapasArray = Array.isArray(etapasResponse) ? etapasResponse : etapasResponse?.data || []
+            const fallbackEtapa = etapasArray[0]
+            etapaId = fallbackEtapa?.id || null
+          }
+
+          if (!etapaId) {
             await Swal.fire({
               title: 'AgroGestion',
-              text: 'No puede registrar el costo debido a que el cultivo no tiene etapas en proceso',
+              text: 'No puede registrar el costo porque el cultivo no tiene etapas disponibles',
               icon: 'warning',
               confirmButtonText: 'Aceptar',
               confirmButtonColor: '#dc3545',
@@ -1445,7 +1534,7 @@ export default function AdminPanel() {
             descripcion,
             valor,
             idcultivo: selectedCultivoId,
-            idetapa_cultivo: Number(etapaEnProceso.idetapacultivo),
+            idetapa_cultivo: etapaId,
             idusuario: Number(session.id),
             idsubcategoria,
             idfinca: Number(cultivo.idfinca),
@@ -1556,13 +1645,20 @@ export default function AdminPanel() {
   const [editingEtapa, setEditingEtapa] = useState(null)
   const [etapaEstadoOptions, setEtapaEstadoOptions] = useState([])
 
-  const sortEtapasOldestFirst = (etapas = []) => {
+  const sortEtapasForDisplay = (etapas = []) => {
     return [...etapas].sort((a, b) => {
+      const estadoA = String(a.estado || '').toLowerCase()
+      const estadoB = String(b.estado || '').toLowerCase()
+      const aEnProceso = estadoA === 'en proceso'
+      const bEnProceso = estadoB === 'en proceso'
+
+      if (aEnProceso && !bEnProceso) return -1
+      if (!aEnProceso && bEnProceso) return 1
+
       const dateA = new Date(a.fechaInicio || a.fecha_inicio || '')
       const dateB = new Date(b.fechaInicio || b.fecha_inicio || '')
-
       if (!Number.isNaN(dateA) && !Number.isNaN(dateB)) {
-        return dateA - dateB
+        return dateB - dateA
       }
       if (a.id != null && b.id != null) {
         return a.id - b.id
@@ -1571,7 +1667,7 @@ export default function AdminPanel() {
     })
   }
 
-  const etapasCultivoOrdenadas = useMemo(() => sortEtapasOldestFirst(etapasCultivo), [etapasCultivo])
+  const etapasCultivoOrdenadas = useMemo(() => sortEtapasForDisplay(etapasCultivo), [etapasCultivo])
 
   // Suma los costos del cultivo seleccionado y cuenta los registros.
   const costosDetalleTotales = (() => {
@@ -1625,27 +1721,31 @@ export default function AdminPanel() {
       )
     }
 
-    return etapasFiltradas.map((etapa, i) => (
-      <tr key={i} className="data-item">
-        <td data-field="nombre">
-          <span className="detalle-cultivo-badge-etapa">{etapa.nombre}</span>
-        </td>
-        <td data-field="descripcion">{etapa.descripcion || '--'}</td>
-        <td data-field="fecha-inicio">{formatDateValue(etapa.fechaInicio)}</td>
-        <td data-field="fecha-final">{formatDateValue(etapa.fechaFinal)}</td>
-        <td data-field="estado">
-          <span className={`detalle-cultivo-badge-estado detalle-cultivo-badge-estado-${String(etapa.estado || 'desconocido').toLowerCase().replace(/\s+/g, '-')}`}>
-            {etapa.estado.replace('-', ' ')}
-          </span>
-        </td>
-        <td data-field="acciones">
-          <div className="action-buttons">
-            <button type="button" className="btn-icon btn-edit" title="Editar" onClick={() => handleOpenEditEtapa(etapa)}>✏️</button>
-            <button type="button" className="btn-icon btn-delete" title="Eliminar">🗑️</button>
-          </div>
-        </td>
-      </tr>
-    ))
+    return etapasFiltradas.map((etapa, i) => {
+      const estadoLower = String(etapa.estado || '').toLowerCase()
+      const isActiveStage = estadoLower === 'en proceso'
+      return (
+        <tr key={i} className="data-item" style={isActiveStage ? { backgroundColor: '#e7f6ff' } : undefined}>
+          <td data-field="nombre">
+            <span className="detalle-cultivo-badge-etapa">{etapa.nombre}</span>
+          </td>
+          <td data-field="descripcion">{etapa.descripcion || '--'}</td>
+          <td data-field="fecha-inicio">{formatDateValue(etapa.fechaInicio)}</td>
+          <td data-field="fecha-final">{formatDateValue(etapa.fechaFinal)}</td>
+          <td data-field="estado">
+            <span className={`detalle-cultivo-badge-estado detalle-cultivo-badge-estado-${String(etapa.estado || 'desconocido').toLowerCase().replace(/\s+/g, '-')}`}>
+              {etapa.estado.replace('-', ' ')}
+            </span>
+          </td>
+          <td data-field="acciones">
+            <div className="action-buttons">
+              <button type="button" className="btn-icon btn-edit" title="Editar" onClick={() => handleOpenEditEtapa(etapa)}>✏️</button>
+              <button type="button" className="btn-icon btn-delete" title="Eliminar" onClick={() => handleDeleteEtapa(etapa)}>🗑️</button>
+            </div>
+          </td>
+        </tr>
+      )
+    })
   })()
 
 
@@ -1978,6 +2078,49 @@ export default function AdminPanel() {
                 Cargando información del dashboard...
               </div>
             ) : null}
+            <div className="dashboard-filters" style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginBottom: 16, alignItems: 'center' }}>
+              <div className="dashboard-filter-item" style={{ display: 'flex', flexDirection: 'column' }}>
+                <label htmlFor="dashboard-month" style={{ fontSize: '0.9rem', marginBottom: '4px' }}>Mes</label>
+                <select
+                  id="dashboard-month"
+                  value={dashboardMonth}
+                  onChange={(event) => setDashboardMonth(event.target.value)}
+                  style={{ padding: '8px', minWidth: '150px' }}
+                >
+                  {MONTH_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="dashboard-filter-item" style={{ display: 'flex', flexDirection: 'column' }}>
+                <label htmlFor="dashboard-year" style={{ fontSize: '0.9rem', marginBottom: '4px' }}>Año</label>
+                <select
+                  id="dashboard-year"
+                  value={dashboardYear}
+                  onChange={(event) => setDashboardYear(event.target.value)}
+                  style={{ padding: '8px', minWidth: '150px' }}
+                >
+                  {YEAR_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ marginTop: 20, height: '42px' }}
+                onClick={() => {
+                  setDashboardMonth('')
+                  setDashboardYear('')
+                }}
+              >
+                Limpiar filtros
+              </button>
+            </div>
             <div className="kpi-container">
               <div className="kpi-card">
                 <div className="kpi-header">
@@ -2374,13 +2517,14 @@ export default function AdminPanel() {
               <table className="data-table">
                 <thead>
                   <tr className="table-title-row">
-                    <th colSpan={6}>Cultivos Registrados</th>
+                    <th colSpan={7}>Cultivos Registrados</th>
                   </tr>
                   <tr>
                     <th>Nombre</th>
                     <th>Tipo</th>
                     <th>Fecha Inicio</th>
                     <th>Fecha Final</th>
+                    <th>Etapa Actual</th>
                     <th>Estado</th>
                     <th>Acciones</th>
                   </tr>
@@ -2401,6 +2545,7 @@ export default function AdminPanel() {
                         <td data-field="tipo">{c.tipo || '--'}</td>
                         <td data-field="fecha-siembra">{formatDateValue(c.fechaInicio || c.fecha_inicio || c.fechainicio)}</td>
                         <td data-field="fecha-cosecha">{formatDateValue(c.fechaCosecha || c.fecha_cosecha || c.fechacosecha)}</td>
+                        <td data-field="etapa-actual">{c.etapaActual || '--'}</td>
                         <td data-field="estado">
                           {
                             (() => {

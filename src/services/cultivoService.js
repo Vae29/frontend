@@ -93,6 +93,11 @@ export async function updateEtapaForCultivo(etapaCultivoId, { descripcion, idest
   return response.data;
 }
 
+export async function deleteEtapaForCultivo(etapaCultivoId) {
+  const response = await httpClient.delete(`/api/cultivos/etapas/${etapaCultivoId}`);
+  return response.data;
+}
+
 export async function validateCultivoForCost(cultivoId) {
   const response = await httpClient.get(`/api/cultivos/${cultivoId}/validate-for-cost`);
   return response.data;

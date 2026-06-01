@@ -201,20 +201,20 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
               return true
             })
             .map((field) => (
-            <div key={field.name} style={{ marginBottom: '20px' }}>
-              <label
-                style={{
-                  display: 'block',
-                  marginBottom: '8px',
-                  fontWeight: '600',
-                  color: 'var(--color-verde-oscuro)',
-                }}
-              >
-                {field.label}
-                {field.required && <span style={{ color: '#e74c3c' }}> *</span>}
-              </label>
+                <div key={field.name} style={{ marginBottom: '20px' }}>
+                  <label
+                    style={{
+                      display: 'block',
+                      marginBottom: '8px',
+                      fontWeight: '600',
+                      color: 'var(--color-verde-oscuro)',
+                    }}
+                  >
+                    {field.label}
+                    {field.required && <span style={{ color: '#e74c3c' }}> *</span>}
+                  </label>
 
-              {field.type === 'multiselect-search' ? (
+                  {field.type === 'multiselect-search' ? (
                 <>
                   <input
                     type="text"
@@ -403,6 +403,7 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
                     onBlur={() => setFocusedField(null)}
                     placeholder={field.placeholder}
                     maxLength={field.maxLength || undefined}
+                    readOnly={field.readOnly}
                     style={{
                       width: '100%',
                       padding: field.type === 'password' ? '12px 45px 12px 16px' : '12px 16px',
@@ -415,12 +416,13 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
                       appearance: 'none',
                       WebkitAppearance: 'none',
                       MozAppearance: 'none',
-                      backgroundColor: 'white',
+                      backgroundColor: field.readOnly ? '#f8f8f8' : 'white',
                       outline: 'none',
                       boxShadow: 'none',
                       WebkitBoxShadow: 'none',
                       color: '#333',
                       WebkitTextFillColor: '#333',
+                      cursor: field.readOnly ? 'default' : 'text',
                     }}
                     onMouseEnter={(e) => {
                       if (!errors[field.name] && focusedField !== field.name) {
