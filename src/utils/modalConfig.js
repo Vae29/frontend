@@ -38,6 +38,23 @@ export const ESTADO_COSTO = [
 /**
  * Define la estructura de campos para cada tipo de modal
  */
+const parseCurrencyValue = (value) => {
+  if (value == null) return NaN
+  const str = String(value).trim()
+  if (!str) return NaN
+  let cleaned = str.replace(/\s+/g, '').replace(/[^0-9,\.]/g, '')
+  if (!cleaned) return NaN
+
+  const decimalMatch = cleaned.match(/([.,])(\d{1,2})$/)
+  if (decimalMatch) {
+    cleaned = cleaned.slice(0, decimalMatch.index)
+  }
+
+  const normalized = cleaned.replace(/[.,]/g, '')
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : NaN
+}
+
 export const getModalConfig = (type) => {
   const configs = {
     [MODAL_TYPES.USUARIO]: {
@@ -48,8 +65,15 @@ export const getModalConfig = (type) => {
           name: 'nombre',
           label: 'Nombre',
           type: 'text',
-          placeholder: 'Ej: Juan Pérez',
+          placeholder: 'Ej: Juan',
           required: true,
+        },
+        {
+          name: 'apellidos',
+          label: 'Apellidos',
+          type: 'text',
+          placeholder: 'Ej: López',
+          required: false,
         },
         {
           name: 'correo',
@@ -159,7 +183,9 @@ export const getModalConfig = (type) => {
           name: 'valor',
           label: 'Valor (COP)',
           type: 'number',
-          placeholder: 'Ej: 50000',
+          isCurrency: true,
+          placeholder: 'Ej: 1.000',
+          inputMode: 'decimal',
           required: true,
         },
         {
@@ -179,7 +205,9 @@ export const getModalConfig = (type) => {
           name: 'cantidad',
           label: 'Cantidad Cosechada',
           type: 'number',
+          isCurrency: true,
           placeholder: 'Ej: 100',
+          inputMode: 'decimal',
           required: true,
           min: 0,
         },
@@ -194,7 +222,9 @@ export const getModalConfig = (type) => {
           name: 'precio',
           label: 'Precio (COP)',
           type: 'number',
-          placeholder: 'Ej: 2500',
+          isCurrency: true,
+          placeholder: 'Ej: 1.000',
+          inputMode: 'decimal',
           required: true,
           min: 0,
         },
@@ -305,8 +335,8 @@ export const validateField = (field, value) => {
   }
 
   if (field.type === 'number' && value !== undefined && value !== null && value !== '') {
-    const numericValue = Number(value)
     const minValue = field.min !== undefined ? Number(field.min) : 1
+    const numericValue = field.isCurrency ? parseCurrencyValue(value) : Number(value)
     if (isNaN(numericValue) || numericValue < minValue) {
       return minValue === 0
         ? `El valor debe ser un número válido mayor o igual a 0`

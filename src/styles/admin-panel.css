@@ -416,10 +416,14 @@ html, body {
 .content-section {
     display: none;
     animation: fadeIn 0.3s ease;
+    max-height: none;
+    overflow: visible;
+    padding-right: 10px;
 }
 
 .content-section.active {
     display: block;
+    overflow: visible;
 }
 
 @keyframes fadeIn {
@@ -621,6 +625,15 @@ html, body {
     max-height: 380px;
 }
 
+#etapas-section .table-container {
+    background-color: var(--bg-white);
+}
+
+#etapas-section .data-table thead,
+#etapas-section .data-table th {
+    background-color: var(--bg-header);
+}
+
 /* Scrollbar del contenedor de tabla */
 .table-container::-webkit-scrollbar {
     width: 6px;
@@ -646,6 +659,51 @@ html, body {
 .table-container.resumen {
     max-height: none;
     overflow-y: auto;
+}
+
+/* Gráficos con cards apiladas verticalmente */
+.charts-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    align-items: stretch;
+}
+
+.chart-card {
+    background-color: var(--bg-white);
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    min-height: auto;
+    overflow: hidden;
+}
+
+.chart-card h3 {
+    margin-bottom: 18px;
+    font-size: 1.1rem;
+    color: var(--text-dark);
+}
+
+.chart-wrapper {
+    flex: 1;
+    min-height: 320px;
+    overflow: hidden;
+}
+
+.chart-wrapper canvas {
+    width: 100% !important;
+    min-height: 320px !important;
+}
+
+.reporte-contenedor {
+    max-height: calc(100vh - 260px);
+    overflow: auto;
+    padding: 18px;
+    background-color: var(--bg-white);
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
 }
 
 /* Tabla de Datos */
@@ -993,10 +1051,11 @@ html, body {
 }
 
 /* Badges exclusivos para Detalle de Cultivo */
-#detalle-cultivo-section .detalle-cultivo-badge-estado,
-#detalle-cultivo-section .detalle-cultivo-badge-etapa,
-#detalle-cultivo-section .detalle-cultivo-badge-categoria,
-#detalle-cultivo-section .detalle-cultivo-badge-subcategoria {
+.detalle-cultivo-badge-estado,
+.detalle-cultivo-badge-etapa,
+.detalle-cultivo-badge-categoria,
+.detalle-cultivo-badge-subcategoria,
+.detalle-cultivo-badge-cultivo {
     display: inline-block;
     padding: 8px 14px;
     border-radius: 999px;
@@ -1006,6 +1065,20 @@ html, body {
     text-align: center;
     vertical-align: middle;
     white-space: nowrap;
+    text-transform: capitalize;
+}
+
+#detalle-cultivo-section .detalle-cultivo-badge-estado,
+#detalle-cultivo-section .detalle-cultivo-badge-etapa,
+#detalle-cultivo-section .detalle-cultivo-badge-categoria,
+#detalle-cultivo-section .detalle-cultivo-badge-subcategoria {
+    display: inline-block;
+}
+
+.detalle-cultivo-badge-cultivo {
+    background-color: #f7db6a;
+    color: #3d3a1a;
+    box-shadow: 0 2px 8px rgba(247, 219, 106, 0.25);
     text-transform: capitalize;
 }
 
@@ -1035,7 +1108,7 @@ html, body {
     background-color: #7f8c8d;
 }
 
-#detalle-cultivo-section .detalle-cultivo-badge-categoria {
+ .detalle-cultivo-badge-categoria {
     color: #ffffff;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
     border-radius: 10px;
@@ -1043,23 +1116,80 @@ html, body {
     text-transform: capitalize;
 }
 
-#detalle-cultivo-section .detalle-cultivo-badge-categoria.cat-mano-obra {
+.detalle-cultivo-badge-categoria.cat-mano-obra {
     background-color: #2E7D32;
 }
 
-#detalle-cultivo-section .detalle-cultivo-badge-categoria.cat-materia-prima {
+.detalle-cultivo-badge-categoria.cat-mano-de-obra-directa {
+    background-color: #2E7D32;
+}
+
+.detalle-cultivo-badge-categoria.cat-materia-prima {
     background-color: #1565C0;
 }
 
-#detalle-cultivo-section .detalle-cultivo-badge-categoria.cat-servicios {
+.detalle-cultivo-badge-categoria.cat-servicios {
     background-color: #6A1B9A;
 }
 
-#detalle-cultivo-section .detalle-cultivo-badge-categoria.cat-costos-indirectos {
+.detalle-cultivo-badge-categoria.cat-contratos-de-servicios {
+    background-color: #6A1B9A;
+}
+
+.detalle-cultivo-badge-categoria.cat-costos-indirectos {
     background-color: #FF6F00;
 }
 
-#detalle-cultivo-section .detalle-cultivo-badge-subcategoria {
+.cg-badge-categoria,
+.cg-badge-subcategoria,
+.cg-badge-cultivo {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 0.85em;
+    font-weight: 600;
+    text-align: center;
+    letter-spacing: 0.3px;
+    text-transform: capitalize;
+}
+
+.cg-badge-categoria.cat-mano-obra {
+    background-color: #2E7D32;
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(46, 125, 50, 0.3);
+}
+
+.cg-badge-categoria.cat-mano-de-obra-directa {
+    background-color: #2E7D32;
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(46, 125, 50, 0.3);
+}
+
+.cg-badge-categoria.cat-materia-prima {
+    background-color: #1565C0;
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(21, 101, 192, 0.3);
+}
+
+.cg-badge-categoria.cat-servicios {
+    background-color: #6A1B9A;
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(106, 27, 154, 0.3);
+}
+
+.cg-badge-categoria.cat-contratos-de-servicios {
+    background-color: #6A1B9A;
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(106, 27, 154, 0.3);
+}
+
+.cg-badge-categoria.cat-costos-indirectos {
+    background-color: #FF6F00;
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(255, 111, 0, 0.3);
+}
+
+.detalle-cultivo-badge-subcategoria {
     color: #1f2937;
     box-shadow: 0 3px 10px rgba(0, 0, 0, 0.10);
     border-radius: 10px;
@@ -1067,27 +1197,87 @@ html, body {
     text-transform: none;
 }
 
-#detalle-cultivo-section .detalle-cultivo-badge-subcategoria.sub-cat-mano-obra {
+.detalle-cultivo-badge-subcategoria.sub-cat-mano-obra {
     background-color: rgba(46, 125, 50, 0.12);
     color: #145a22;
 }
 
-#detalle-cultivo-section .detalle-cultivo-badge-subcategoria.sub-cat-materia-prima {
+.detalle-cultivo-badge-subcategoria.sub-cat-mano-de-obra-directa {
+    background-color: rgba(46, 125, 50, 0.12);
+    color: #145a22;
+}
+
+.detalle-cultivo-badge-subcategoria.sub-cat-materia-prima {
     background-color: rgba(21, 101, 192, 0.12);
     color: #083a63;
 }
 
-#detalle-cultivo-section .detalle-cultivo-badge-subcategoria.sub-cat-servicios {
+.detalle-cultivo-badge-subcategoria.sub-cat-servicios {
     background-color: rgba(106, 27, 154, 0.12);
     color: #3e0f52;
 }
 
-#detalle-cultivo-section .detalle-cultivo-badge-subcategoria.sub-cat-costos-indirectos {
-    background-color: rgba(255, 111, 0, 0.12);
-    color: #663f00;
+.detalle-cultivo-badge-subcategoria.sub-cat-contratos-de-servicios {
+    background-color: rgba(106, 27, 154, 0.12);
+    color: #3e0f52;
 }
 
-#detalle-cultivo-section .detalle-cultivo-badge-subcategoria.sub-cat-sin-subcategoria {
+.detalle-cultivo-badge-subcategoria.sub-cat-costos-indirectos {
+    background-color: rgba(147, 97, 39, 0.12);
+    color: #e38b07;
+}
+
+.cg-badge-subcategoria {
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    border-radius: 10px;
+    padding: 6px 10px;
+    text-transform: none;
+}
+
+.cg-badge-subcategoria.sub-cat-mano-de-obra {
+    background-color: rgba(46, 125, 50, 0.12);
+    color: #145a22;
+}
+
+.cg-badge-subcategoria.sub-cat-mano-de-obra-directa {
+    background-color: rgba(46, 125, 50, 0.12);
+    color: #145a22;
+}
+
+.cg-badge-subcategoria.sub-cat-materia-prima {
+    background-color: rgba(21, 101, 192, 0.12);
+    color: #083a63;
+}
+
+.cg-badge-subcategoria.sub-cat-servicios {
+    background-color: rgba(106, 27, 154, 0.12);
+    color: #3e0f52;
+}
+
+.cg-badge-subcategoria.sub-cat-contratos-de-servicios {
+    background-color: rgba(106, 27, 154, 0.12);
+    color: #3e0f52;
+}
+
+.cg-badge-subcategoria.sub-cat-costos-indirectos {
+    background-color: rgba(255, 111, 0, 0.12);
+    color: #b35a00;
+}
+
+.cg-badge-subcategoria.sub-cat-sin-subcategoria {
+    background-color: #95a5a6;
+    color: #ffffff;
+}
+
+.cg-badge-cultivo {
+    background-color: #f7db6a;
+    color: #3d3a1a;
+    box-shadow: 0 2px 8px rgba(247, 219, 106, 0.25);
+    text-transform: capitalize;
+}
+
+.detalle-cultivo-badge-subcategoria.sub-cat-sin-subcategoria {
     background-color: rgba(149, 165, 166, 0.16);
     color: #2c3e50;
 }

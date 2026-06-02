@@ -13,6 +13,41 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
 
   const config = getModalConfig(modalType)
 
+  const parseCurrencyInput = (value) => {
+    if (value == null) return NaN
+    const str = String(value).trim()
+    if (!str) return NaN
+    let cleaned = str.replace(/\s+/g, '').replace(/[^0-9,\.]/g, '')
+    if (!cleaned) return NaN
+
+    const decimalMatch = cleaned.match(/([.,])(\d{1,2})$/)
+    if (decimalMatch) {
+      cleaned = cleaned.slice(0, decimalMatch.index)
+    }
+
+    const normalized = cleaned.replace(/[.,]/g, '').replace(/^0+(?=\d)/, '') || '0'
+    const parsed = Number(normalized)
+    return Number.isFinite(parsed) ? parsed : NaN
+  }
+
+  const formatCurrencyInput = (value) => {
+    if (value == null) return ''
+    let str = String(value).trim()
+    if (!str) return ''
+    str = str.replace(/\s+/g, '').replace(/[^0-9,\.]/g, '')
+    if (!str) return ''
+
+    const decimalMatch = str.match(/([.,])(\d{1,2})$/)
+    if (decimalMatch) {
+      str = str.slice(0, decimalMatch.index)
+    }
+
+    let integerPart = str.replace(/[.,]/g, '').replace(/^0+(?=\d)/, '')
+    if (integerPart === '') integerPart = '0'
+    integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+    return integerPart
+  }
+
   // Inicializar formData cuando cambia el tipo de modal
   useEffect(() => {
     if (isOpen && modalType) {
@@ -30,9 +65,14 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
 
   const handleInputChange = (e) => {
     const { name, value, type, multiple, options } = e.target
-    const nextValue = multiple
+    const field = config.fields.find((f) => f.name === name)
+    let nextValue = multiple
       ? Array.from(options).filter((option) => option.selected).map((option) => option.value)
       : value
+
+    if (field?.isCurrency) {
+      nextValue = formatCurrencyInput(nextValue)
+    }
 
     setFormData((prev) => ({
       ...prev,
@@ -98,6 +138,7 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
   const handleCancel = () => {
     setFormData({})
     setErrors({})
+    setFilterQueries({})
     onClose()
   }
 
@@ -191,7 +232,7 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
           {title || config.title}
         </h2>
 
-        <form onSubmit={handleSubmit}>
+        <form autoComplete="off" onSubmit={handleSubmit}>
           {config.fields
             .filter((field) => {
               // hide fields meant only for editing when creating
@@ -395,7 +436,8 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
                 <div style={{ position: 'relative' }}>
                   <input
                     className="dynamic-modal-input"
-                    type={field.type === 'password' && showPassword[field.name] ? 'text' : field.type}
+                    type={field.type === 'password' && showPassword[field.name] ? 'text' : field.isCurrency ? 'text' : field.type}
+                    inputMode={field.inputMode || (field.isCurrency ? 'decimal' : field.type === 'number' ? 'decimal' : undefined)}
                     name={field.name}
                     value={formData[field.name] || ''}
                     onChange={handleInputChange}
@@ -404,6 +446,7 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
                     placeholder={field.placeholder}
                     maxLength={field.maxLength || undefined}
                     readOnly={field.readOnly}
+                    autoComplete={field.type === 'password' ? 'new-password' : 'off'}
                     style={{
                       width: '100%',
                       padding: field.type === 'password' ? '12px 45px 12px 16px' : '12px 16px',

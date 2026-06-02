@@ -1,5 +1,23 @@
 import httpClient from './httpClient.js';
 
+function parseCurrencyParameter(value) {
+  if (value == null) return NaN
+  if (typeof value === 'number') return Number.isFinite(value) ? value : NaN
+  let str = String(value).trim()
+  if (!str) return NaN
+  str = str.replace(/\s+/g, '').replace(/[^0-9,\.]/g, '')
+  if (!str) return NaN
+
+  const decimalMatch = str.match(/([.,])(\d{1,2})$/)
+  if (decimalMatch) {
+    str = str.slice(0, decimalMatch.index)
+  }
+
+  const normalized = str.replace(/[.,]/g, '')
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : NaN
+}
+
 export async function fetchCultivosPorFinca(fincaId) {
   const response = await httpClient.get(`/api/cultivos/finca/${fincaId}`);
   return response.data?.data ?? response.data;
@@ -113,12 +131,12 @@ export async function validateCultivoForCost(cultivoId) {
   return response.data;
 }
 
-export async function createCosto({ descripcion, valor, idcultivo, idetapa_cultivo, idusuario, idsubcategoria, idfinca, idestado_pago }) {
+export async function createCosto({ descripcion, valor, idcultivo = null, idetapa_cultivo = null, idusuario, idsubcategoria, idfinca, idestado_pago }) {
   const response = await httpClient.post('/api/costos', {
     descripcion: descripcion?.trim() || null,
-    valor: Number(valor),
-    idcultivo: Number(idcultivo),
-    idetapa_cultivo: Number(idetapa_cultivo),
+    valor: parseCurrencyParameter(valor),
+    idcultivo: idcultivo != null ? Number(idcultivo) : null,
+    idetapa_cultivo: idetapa_cultivo != null ? Number(idetapa_cultivo) : null,
     idusuario: Number(idusuario),
     idsubcategoria: Number(idsubcategoria),
     idfinca: Number(idfinca),
@@ -130,11 +148,16 @@ export async function createCosto({ descripcion, valor, idcultivo, idetapa_culti
 export async function updateCosto(idcosto, { descripcion, valor, idsubcategoria, idestado_pago }) {
   const response = await httpClient.put(`/api/costos/${idcosto}`, {
     descripcion: descripcion?.trim() || null,
-    valor: Number(valor),
+    valor: parseCurrencyParameter(valor),
     idsubcategoria: Number(idsubcategoria),
     idestado_pago: Number(idestado_pago),
   })
   return response.data
+}
+
+export async function fetchCostosPorFinca(fincaId) {
+  const response = await httpClient.get(`/api/costos/finca/${fincaId}`)
+  return response.data?.data ?? response.data
 }
 
 export async function deleteCosto(idcosto) {
@@ -149,9 +172,9 @@ export async function fetchCosechasPorCultivo(cultivoId) {
 
 export async function createCosecha(cultivoId, { cantidad, idunidadmedida, precio, idtipo_precio }) {
   const response = await httpClient.post(`/api/cultivos/${cultivoId}/cosechas`, {
-    cantidad,
+    cantidad: parseCurrencyParameter(cantidad),
     idunidadmedida,
-    precio,
+    precio: parseCurrencyParameter(precio),
     idtipo_precio,
   })
   return response.data
@@ -159,9 +182,9 @@ export async function createCosecha(cultivoId, { cantidad, idunidadmedida, preci
 
 export async function updateCosecha(idcosecha, { cantidad, idunidadmedida, precio, idtipo_precio }) {
   const response = await httpClient.put(`/api/cosechas/${idcosecha}`, {
-    cantidad,
+    cantidad: parseCurrencyParameter(cantidad),
     idunidadmedida,
-    precio,
+    precio: parseCurrencyParameter(precio),
     idtipo_precio,
   })
   return response.data
