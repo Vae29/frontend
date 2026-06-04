@@ -845,6 +845,7 @@ html, body {
     width: 36px;
     height: 36px;
     min-width: 36px;
+    font-family: "Segoe UI Emoji", "Segoe UI Symbol", "Apple Color Emoji", sans-serif;
 }
 
 .btn-edit {

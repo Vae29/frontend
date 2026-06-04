@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import * as Agro from '../services/agroData'
 import { clearTokens } from '../services/authSession'
 import useAuthSession from '../hooks/useAuthSession'
+import useSounds from '../hooks/useSounds'
 import { logoutUser, fetchUsers, createUser, updateUser, deleteUser } from '../services/authApi'
 import { fetchCultivosEnProceso } from '../services/asignaciones-usuarioAPI'
 import { getInventarioElementos } from '../utils/inventarioElementos'
@@ -298,6 +299,8 @@ export default function AdminPanel() {
   const navigate = useNavigate()
   // Sesión actual del usuario; se usa para validar rol de administrador.
   const session = useAuthSession()
+  // Hook para efectos de sonido de retroalimentación auditiva
+  const { playSuccess, playError, playDisable } = useSounds()
   const accountFullName = [session?.nombre, session?.apellidos].filter(Boolean).join(' ') || session?.email || 'Cuenta'
 
   // Estado local del componente administrado por React.
@@ -855,6 +858,7 @@ export default function AdminPanel() {
       setModalInitialData({
         idetapa: idetapaValue,
         idestado: String(etapa.idestado || ''),
+        descripcion: etapa.descripcion || '',
       })
       setDynamicModalType(MODAL_TYPES.ETAPA)
       setShowDynamicModal(true)
@@ -920,6 +924,11 @@ export default function AdminPanel() {
         updateData.descripcion = descripcion
       }
 
+      const idetapa = Number(String(formData.idetapa || '').trim())
+      if (idetapa && Number.isInteger(idetapa) && idetapa > 0) {
+        updateData.idetapa = idetapa
+      }
+
       if (idestado) {
         updateData.idestado = idestado
       }
@@ -944,19 +953,31 @@ export default function AdminPanel() {
 
       if (res && res.success) {
         showNotification('Etapa actualizada correctamente', 'success')
-        const updated = await fetchEtapasPorCultivo(selectedCultivoId)
-        setEtapasCultivo(sortEtapasForDisplay(Array.isArray(updated) ? updated : []))
+        playSuccess()
+        const [updatedEtapas, updatedDetalle, updatedCosechas] = await Promise.all([
+          fetchEtapasPorCultivo(selectedCultivoId),
+          fetchCultivoDetalle(selectedCultivoId),
+          fetchCosechasPorCultivo(selectedCultivoId),
+        ])
+        setEtapasCultivo(sortEtapasForDisplay(Array.isArray(updatedEtapas) ? updatedEtapas : []))
+        setDetalleCostos(Array.isArray(updatedDetalle) ? updatedDetalle : [])
+        setDetalleCosechas(Array.isArray(updatedCosechas) ? updatedCosechas : [])
+        if (fincaId) {
+          fetchCultivosData(fincaId)
+        }
         setShowDynamicModal(false)
         setDynamicModalType(null)
         setEditingEtapa(null)
       } else {
         console.error('Error actualizando etapa:', res)
         showNotification(res?.message || 'Error actualizando etapa', 'error')
+        playError()
       }
     } catch (e) {
       console.error('Error actualizando etapa:', e)
       const message = e?.response?.data?.message || e?.message || 'Error actualizando etapa'
       showNotification(message, 'error')
+      playError()
     } finally {
       setIsSavingEtapa(false)
     }
@@ -997,11 +1018,13 @@ export default function AdminPanel() {
       const res = await deleteEtapaForCultivo(etapaId)
       if (res && res.success) {
         showNotification(res.message || 'Etapa eliminada correctamente', 'success')
+        playDisable()
         const updated = await fetchEtapasPorCultivo(selectedCultivoId)
         setEtapasCultivo(sortEtapasForDisplay(Array.isArray(updated) ? updated : []))
       } else {
         console.error('Error eliminando etapa:', res)
         showNotification(res?.message || 'Error eliminando etapa', 'error')
+        playError()
       }
     } catch (error) {
       console.error('Error eliminando etapa:', error)
@@ -1206,11 +1229,13 @@ export default function AdminPanel() {
     try {
       await deleteFinca(id)
       showNotification('Finca eliminada correctamente', 'success')
+      playDisable()
       setFincasRefresh((prev) => prev + 1)
     } catch (error) {
       console.error(error)
       const message = error?.response?.data?.error || 'Error eliminando la finca'
       showNotification(message, 'error')
+      playError()
     }
   }
 
@@ -1596,6 +1621,7 @@ export default function AdminPanel() {
       const response = await deleteCosto(costo.id)
       if (!response.success) {
         showNotification(response.message || 'No se pudo eliminar el costo', 'error')
+        playError()
         return
       }
       if (activeSection === 'costos') {
@@ -1604,10 +1630,12 @@ export default function AdminPanel() {
         setDetalleCostos((prev) => prev.filter((item) => item.id !== costo.id))
       }
       showNotification('Costo eliminado exitosamente', 'success')
+      playDisable()
     } catch (error) {
       console.error('Error eliminando costo:', error)
       const errMsg = error?.response?.data?.message || 'Error al eliminar el costo'
       showNotification(errMsg, 'error')
+      playError()
     }
   }
 
@@ -1714,14 +1742,17 @@ export default function AdminPanel() {
       const response = await deleteCosecha(cosecha.id)
       if (!response.success) {
         showNotification(response.message || 'No se pudo eliminar la cosecha', 'error')
+        playError()
         return
       }
       setDetalleCosechas((prev) => prev.filter((item) => item.id !== cosecha.id))
       showNotification('Cosecha eliminada exitosamente', 'success')
+      playDisable()
     } catch (error) {
       console.error('Error eliminando cosecha:', error)
       const errMsg = error?.response?.data?.message || 'Error al eliminar la cosecha'
       showNotification(errMsg, 'error')
+      playError()
     }
   }
 
@@ -1817,6 +1848,7 @@ export default function AdminPanel() {
     const response = await deleteUser(id)
     if (!response.success) {
       showNotification(response.message, 'error')
+      playError()
       return
     }
 
@@ -1826,6 +1858,7 @@ export default function AdminPanel() {
       setAsignacionesOpen(false)
     }
     showNotification('Usuario eliminado exitosamente', 'success')
+    playDisable()
   }
 
   // Elimina un cultivo después de pedir confirmación.
@@ -1850,6 +1883,7 @@ export default function AdminPanel() {
     const response = await deleteCultivo(id)
     if (!response.success) {
       showNotification(response.message, 'error')
+      playError()
       return
     }
 
@@ -1859,6 +1893,7 @@ export default function AdminPanel() {
       setAsignacionesOpen(false)
     }
     showNotification('Cultivo eliminado exitosamente', 'success')
+    playDisable()
   }
    
 
@@ -1892,6 +1927,7 @@ export default function AdminPanel() {
           const response = await updateUser(editingUser.id, payload)
           if (!response.success) {
             showNotification(response.message, 'error')
+            playError()
             return
           }
 
@@ -1902,6 +1938,7 @@ export default function AdminPanel() {
           const response = await createUser(payload)
           if (!response.success) {
             showNotification(response.message, 'error')
+            playError()
             return
           }
 
@@ -1920,16 +1957,19 @@ export default function AdminPanel() {
         // Para crear: nombre y tipo son suficientes. Para editar: también requiere estado
         if (!nombre || !idtipocultivo) {
           showNotification('Por favor completa el nombre y tipo del cultivo', 'error')
+          playError()
           return
         }
 
         if (!idfinca || idfinca <= 0) {
           showNotification('Debe seleccionar una finca antes de agregar un cultivo', 'error')
+          playError()
           return
         }
 
         if (editingCultivo && !idestado) {
           showNotification('Por favor selecciona un estado para actualizar el cultivo', 'error')
+          playError()
           return
         }
 
@@ -1946,6 +1986,7 @@ export default function AdminPanel() {
             if (!resp || resp.success === false) {
               const msg = resp?.message || 'Error actualizando el cultivo'
               showNotification(msg, 'error')
+              playError()
               return
             }
 
@@ -1957,6 +1998,7 @@ export default function AdminPanel() {
             if (!resp || resp.success === false) {
               const msg = resp?.message || 'Error creando el cultivo'
               showNotification(msg, 'error')
+              playError()
               return
             }
             successMessage = `Cultivo "${nombre}" agregado exitosamente`
@@ -1989,21 +2031,25 @@ export default function AdminPanel() {
 
         if (!idsubcategoria || isNaN(idsubcategoria)) {
           showNotification('Selecciona una subcategoría válida para el costo', 'error')
+          playError()
           return
         }
 
         if (!idestado_pago || isNaN(idestado_pago)) {
           showNotification('Selecciona un estado de pago válido', 'error')
+          playError()
           return
         }
 
         if (Number.isNaN(valor) || valor <= 0 || valor > 100000000000) {
           showNotification('El valor debe ser un monto COP válido mayor a 0', 'error')
+          playError()
           return
         }
 
         if (!session?.id) {
           showNotification('No se pudo determinar el usuario en sesión', 'error')
+          playError()
           return
         }
 
@@ -2121,26 +2167,36 @@ export default function AdminPanel() {
 
         if (!Number.isFinite(cantidad) || cantidad < 0) {
           showNotification('La cantidad debe ser un número válido mayor o igual a 0', 'error')
+
+          playError()
           return
         }
 
         if (!idunidadmedida || Number.isNaN(idunidadmedida)) {
           showNotification('Selecciona una unidad de medida válida', 'error')
+
+          playError()
           return
         }
 
         if (!Number.isFinite(precio) || precio < 0) {
           showNotification('El precio debe ser un número válido mayor o igual a 0', 'error')
+
+          playError()
           return
         }
 
         if (!idtipo_precio || Number.isNaN(idtipo_precio)) {
           showNotification('Selecciona un tipo de precio válido', 'error')
+
+          playError()
           return
         }
 
         if (!selectedCultivoId) {
           showNotification('Selecciona un cultivo primero', 'error')
+
+          playError()
           return
         }
 
@@ -2194,6 +2250,8 @@ export default function AdminPanel() {
         const municipio = formData.municipio
         if (!nombre || !departamento || !municipio) {
           showNotification('Por favor completa todos los campos de la finca', 'error')
+
+          playError()
           return
         }
         const ubicacion = `${municipio}, ${departamento}`
@@ -2230,6 +2288,7 @@ export default function AdminPanel() {
     }
 
     showNotification(successMessage, 'success')
+    playSuccess()
     handleCloseDynamicModal()
   }
 
@@ -2472,7 +2531,7 @@ export default function AdminPanel() {
     if (etapasFiltradas.length === 0) {
       return (
         <tr className="data-item">
-          <td colSpan={6} style={{ textAlign: 'center' }}>No hay etapas registradas</td>
+          <td colSpan={7} style={{ textAlign: 'center' }}>No hay etapas registradas</td>
         </tr>
       )
     }
@@ -2493,10 +2552,11 @@ export default function AdminPanel() {
               {etapa.estado.replace('-', ' ')}
             </span>
           </td>
+          <td data-field="estado-registro"></td>
           <td data-field="acciones">
             <div className="action-buttons">
-              <button type="button" className="btn-icon btn-edit" title="Editar" onClick={() => handleOpenEditEtapa(etapa)}>✏️</button>
-              <button type="button" className="btn-icon btn-delete" title="Eliminar" onClick={() => handleDeleteEtapa(etapa)}>🗑️</button>
+              <button type="button" className="btn-icon btn-edit" title="Editar" onClick={() => handleOpenEditEtapa(etapa)}>{'\u270F\uFE0F'}</button>
+              <button type="button" className="btn-icon btn-delete" title="Eliminar" onClick={() => handleDeleteEtapa(etapa)}>{'\uD83D\uDEAB'}</button>
             </div>
           </td>
         </tr>
@@ -3010,25 +3070,26 @@ export default function AdminPanel() {
               <table className="data-table">
                 <thead>
                   <tr className="table-title-row">
-                    <th colSpan={4}>Fincas Registradas</th>
+                    <th colSpan={5}>Fincas Registradas</th>
                   </tr>
                   <tr>
                     <th>Nombre</th>
                     <th>Ubicación</th>
                     <th>Cultivos activos</th>
+                    <th>Estado Registro</th>
                     <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoadingFincas ? (
                     <tr>
-                      <td colSpan={4} style={{ textAlign: 'center', padding: '20px' }}>
+                      <td colSpan={5} style={{ textAlign: 'center', padding: '20px' }}>
                         Cargando fincas...
                       </td>
                     </tr>
                   ) : fincas.length === 0 ? (
                     <tr>
-                      <td colSpan={4} style={{ textAlign: 'center', padding: '20px' }}>
+                      <td colSpan={5} style={{ textAlign: 'center', padding: '20px' }}>
                         No hay fincas registradas.
                       </td>
                     </tr>
@@ -3040,6 +3101,7 @@ export default function AdminPanel() {
                           <td data-field="nombre">{finca.nombre}</td>
                           <td data-field="ubicacion">{finca.ubicacion || '--'}</td>
                           <td data-field="cultivos">{cultivosActivos}</td>
+                          <td data-field="estado-registro"></td>
                           <td data-field="acciones">
                             <div className="action-buttons">
                               <button
@@ -3048,7 +3110,7 @@ export default function AdminPanel() {
                                 title="Editar"
                                 onClick={() => handleOpenFincaModal(finca)}
                               >
-                                ✏️
+                                {'\u270F\uFE0F'}
                               </button>
                               <button
                                 type="button"
@@ -3056,7 +3118,7 @@ export default function AdminPanel() {
                                 title="Eliminar"
                                 onClick={() => handleDeleteFinca(finca.id)}
                               >
-                                🗑️
+                                {'\uD83D\uDCC2'}
                               </button>
                             </div>
                           </td>
@@ -3096,13 +3158,14 @@ export default function AdminPanel() {
               <table className="data-table">
                 <thead>
                   <tr className="table-title-row">
-                    <th colSpan={5}>Usuarios Registrados</th>
+                    <th colSpan={6}>Usuarios Registrados</th>
                   </tr>
                   <tr>
                     <th>Nombre</th>
                     <th>Email</th>
                     <th>Contraseña</th>
                     <th>Rol</th>
+                    <th>Estado Registro</th>
                     <th>Acciones</th>
                   </tr>
                 </thead>
@@ -3126,6 +3189,7 @@ export default function AdminPanel() {
                         <td data-field="email">{usuario.email}</td>
                         <td data-field="password">{usuario.password}</td>
                         <td data-field="rol">{usuario.rol}</td>
+                        <td data-field="estado-registro"></td>
                         <td data-field="acciones">
                           <div className="action-buttons">
                             <button
@@ -3137,7 +3201,7 @@ export default function AdminPanel() {
                                 handleOpenEditUser(usuario)
                               }}
                             >
-                              ✏️
+                              {'\u270F\uFE0F'}
                             </button>
                             <button
                               type="button"
@@ -3148,7 +3212,7 @@ export default function AdminPanel() {
                                 handleDeleteUser(usuario.id)
                               }}
                             >
-                              🗑️
+                              {'\uD83D\uDD12'}
                             </button>
                           </div>
                         </td>
@@ -3157,7 +3221,7 @@ export default function AdminPanel() {
                   })}
                   {filteredUsers.length === 0 && filtroUsuario.trim().length > 0 && (
                     <tr>
-                      <td colSpan={5} className="no-results-row">
+                      <td colSpan={6} className="no-results-row">
                         Usuario no encontrado
                       </td>
                     </tr>
@@ -3260,7 +3324,7 @@ export default function AdminPanel() {
               <table className="data-table">
                 <thead>
                   <tr className="table-title-row">
-                    <th colSpan={7}>Cultivos Registrados</th>
+                    <th colSpan={8}>Cultivos Registrados</th>
                   </tr>
                   <tr>
                     <th>Nombre</th>
@@ -3269,6 +3333,7 @@ export default function AdminPanel() {
                     <th>Fecha Final</th>
                     <th>Etapa Actual</th>
                     <th>Estado</th>
+                    <th>Estado Registro</th>
                     <th>Acciones</th>
                   </tr>
                 </thead>
@@ -3303,6 +3368,7 @@ export default function AdminPanel() {
                             })()
                           }
                         </td>
+                        <td data-field="estado-registro"></td>
                         <td data-field="acciones">
                           <div className="action-buttons">
                             <button
@@ -3314,7 +3380,7 @@ export default function AdminPanel() {
                                 handleOpenEditCultivo(c)
                               }}
                             >
-                              ✏️
+                              {'\u270F\uFE0F'}
                             </button>
                             <button type="button" className="btn-icon btn-delete" title="Eliminar"
                               onClick={(e) => {
@@ -3322,7 +3388,7 @@ export default function AdminPanel() {
                                 handleDeleteCultivo(c.id)
                               }}
                             >
-                              🗑️
+                              {'\uD83D\uDCC2'}
                             </button>
                           </div>
                         </td>
@@ -3330,7 +3396,7 @@ export default function AdminPanel() {
                     ))
                   ) : (
                     <tr className="data-item">
-                      <td colSpan={6} style={{ textAlign: 'center', color: '#666' }}>
+                      <td colSpan={8} style={{ textAlign: 'center', color: '#666' }}>
                         No hay cultivos registrados en esta finca
                       </td>
                     </tr>
@@ -3407,7 +3473,7 @@ export default function AdminPanel() {
                     <table className="data-table">
                       <thead>
                         <tr className="table-title-row">
-                          <th colSpan={6}>Etapas Registradas</th>
+                          <th colSpan={7}>Etapas Registradas</th>
                         </tr>
                         <tr>
                           <th>Nombre</th>
@@ -3415,6 +3481,7 @@ export default function AdminPanel() {
                           <th>Fecha Inicio</th>
                           <th>Fecha Final</th>
                           <th>Estado</th>
+                          <th>Estado Registro</th>
                           <th>Acciones</th>
                         </tr>
                       </thead>
@@ -3457,7 +3524,7 @@ export default function AdminPanel() {
                     <table className="data-table">
                       <thead>
                         <tr className="table-title-row">
-                          <th colSpan={6}>Cosechas Realizadas</th>
+                          <th colSpan={7}>Cosechas Realizadas</th>
                         </tr>
                         <tr>
                           <th>Fecha</th>
@@ -3465,19 +3532,20 @@ export default function AdminPanel() {
                           <th>Unidad Medida</th>
                           <th>Precio</th>
                           <th>Tipo Precio</th>
+                          <th>Estado Registro</th>
                           <th>Acciones</th>
                         </tr>
                       </thead>
                       <tbody>
                         {isLoadingDetalleCosechas ? (
                           <tr className="data-item">
-                            <td colSpan={6} style={{ textAlign: 'center' }}>
+                            <td colSpan={7} style={{ textAlign: 'center' }}>
                               Cargando cosechas...
                             </td>
                           </tr>
                         ) : filteredCosechas.length === 0 ? (
                           <tr className="data-item">
-                            <td colSpan={6} style={{ textAlign: 'center' }}>
+                            <td colSpan={7} style={{ textAlign: 'center' }}>
                               No hay cosechas registradas
                             </td>
                           </tr>
@@ -3489,13 +3557,14 @@ export default function AdminPanel() {
                               <td data-field="unidad">{cosecha.unidad || cosecha.unidad_medida || cosecha.unidad?.nombre || cosecha.unidadMedida}</td>
                               <td data-field="precio">{formatPrecioValue(cosecha.precio || cosecha.precio_unitario)}</td>
                               <td data-field="tipo-precio">{cosecha.tipoPrecio || cosecha.tipoprecio || cosecha.tipoPrecio?.nombre || cosecha.tipo_precio || cosecha.tipoPrecioId || cosecha.tipoprecioid || ''}</td>
+                              <td data-field="estado-registro"></td>
                               <td data-field="acciones">
                                 <div className="action-buttons">
                                   <button type="button" className="btn-icon btn-edit" title="Editar" onClick={() => handleOpenEditCosecha(cosecha)}>
-                                    ✏️
+                                    {'\u270F\uFE0F'}
                                   </button>
                                   <button type="button" className="btn-icon btn-delete" title="Eliminar" onClick={() => handleDeleteCosecha(cosecha)}>
-                                    🗑️
+                                    {'\uD83D\uDEAB'}
                                   </button>
                                 </div>
                               </td>
@@ -3593,7 +3662,7 @@ export default function AdminPanel() {
                     <table className="data-table costos-table">
                       <thead>
                         <tr className="table-title-row">
-                          <th colSpan={9}>Costos Registrados del Cultivo</th>
+                          <th colSpan={10}>Costos Registrados del Cultivo</th>
                         </tr>
                         <tr>
                           <th>Fecha</th>
@@ -3604,25 +3673,26 @@ export default function AdminPanel() {
                           <th>Info Adicional</th>
                           <th>Valor</th>
                           <th>Estado</th>
+                          <th>Estado Registro</th>
                           <th>Acciones</th>
                         </tr>
                       </thead>
                       <tbody>
                         {isLoadingDetalleCostos ? (
                           <tr>
-                            <td colSpan={9} style={{ textAlign: 'center', padding: '20px' }}>
+                            <td colSpan={10} style={{ textAlign: 'center', padding: '20px' }}>
                               Cargando costos del cultivo...
                             </td>
                           </tr>
                         ) : detallesCostosOrdenados.length === 0 ? (
                           <tr>
-                            <td colSpan={9} style={{ textAlign: 'center', padding: '20px' }}>
+                            <td colSpan={10} style={{ textAlign: 'center', padding: '20px' }}>
                               No hay costos registrados para este cultivo.
                             </td>
                           </tr>
                         ) : visibleCostos.length === 0 ? (
                           <tr>
-                            <td colSpan={9} style={{ textAlign: 'center', padding: '20px' }}>
+                            <td colSpan={10} style={{ textAlign: 'center', padding: '20px' }}>
                               No se encontraron costos con los filtros aplicados.
                             </td>
                           </tr>
@@ -3733,6 +3803,7 @@ export default function AdminPanel() {
                                     {estadoLabel}
                                   </span>
                                 </td>
+                                <td data-field="estado-registro"></td>
                                 <td data-field="acciones">
                                   <div className="action-buttons">
                                     <button
@@ -3744,7 +3815,7 @@ export default function AdminPanel() {
                                         handleOpenEditCosto(costo)
                                       }}
                                     >
-                                      ✏️
+                                      {'\u270F\uFE0F'}
                                     </button>
                                     <button
                                       type="button"
@@ -3755,7 +3826,7 @@ export default function AdminPanel() {
                                         await handleDeleteCosto(costo)
                                       }}
                                     >
-                                      🗑️
+                                      {'\uD83D\uDEAB'}
                                     </button>
                                   </div>
                                 </td>
@@ -4082,13 +4153,13 @@ export default function AdminPanel() {
                                 event.stopPropagation()
                                 handleOpenEditCosto(costo)
                               }}>
-                                ✏️
+                                {'\u270F\uFE0F'}
                               </button>
                               <button type="button" className="btn-icon btn-delete" title="Eliminar" onClick={(event) => {
                                 event.stopPropagation()
                                 handleDeleteCosto(costo)
                               }}>
-                                🗑️
+                                {'\uD83D\uDEAB'}
                               </button>
                             </div>
                           </td>
