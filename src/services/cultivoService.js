@@ -111,8 +111,9 @@ export async function createEtapaForCultivo(cultivoId, { idetapa, descripcion, f
   return response.data;
 }
 
-export async function updateEtapaForCultivo(etapaCultivoId, { descripcion, idestado }, { forceFinalize = false, forceEnProceso = false } = {}) {
+export async function updateEtapaForCultivo(etapaCultivoId, { idetapa, descripcion, idestado }, { forceFinalize = false, forceEnProceso = false } = {}) {
   const response = await httpClient.put(`/api/cultivos/etapas/${etapaCultivoId}`, {
+    idetapa,
     descripcion,
     idestado,
     forceFinalize,

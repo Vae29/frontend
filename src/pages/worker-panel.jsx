@@ -605,6 +605,7 @@ export default function WorkerPanel() {
       return
     }
 
+    const idetapa = Number(String(formData.idetapa || '').trim())
     const idestado = Number(String(formData.idestado || '').trim())
     const descripcion = String(formData.descripcion || '')
 
@@ -643,6 +644,9 @@ export default function WorkerPanel() {
         }
       }
 
+      if (idetapa) {
+        updateData.idetapa = idetapa
+      }
       if (descripcion) {
         updateData.descripcion = descripcion
       }
