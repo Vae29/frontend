@@ -32,6 +32,7 @@ const SECTION_TITLES = {
   reportes: 'Reportes',
   costos: 'Costos Generales',
   rentabilidad: 'Análisis de Rentabilidad',
+  configuracion: 'Configuración',
   alertas: 'Centro de Alertas',
 }
 
@@ -300,8 +301,19 @@ export default function AdminPanel() {
   // Sesión actual del usuario; se usa para validar rol de administrador.
   const session = useAuthSession()
   // Hook para efectos de sonido de retroalimentación auditiva
-  const { playSuccess, playError, playDisable } = useSounds()
+  const { playSuccess, playError, playDisable, playWarning, playClick, setMute, isMuted } = useSounds()
   const accountFullName = [session?.nombre, session?.apellidos].filter(Boolean).join(' ') || session?.email || 'Cuenta'
+
+  const [soundsEnabled, setSoundsEnabled] = useState(() => {
+    const stored = localStorage.getItem('soundsEnabled')
+    if (stored !== null) return stored === 'true'
+    return !isMuted()
+  })
+
+  const [darkModeEnabled, setDarkModeEnabled] = useState(() => {
+    const stored = localStorage.getItem('darkModeEnabled')
+    return stored !== null ? stored === 'true' : false
+  })
 
   // Estado local del componente administrado por React.
   // fincaId guarda la finca seleccionada actualmente.
@@ -587,6 +599,10 @@ export default function AdminPanel() {
 
   // Muestra una notificación rápida en pantalla.
   const showNotification = useCallback((message, type = 'info') => {
+    if (type === 'success') {
+      playSuccess()
+    }
+
     Swal.fire({
       toast: true,
       position: 'top-end',
@@ -596,7 +612,19 @@ export default function AdminPanel() {
       timer: 2200,
       timerProgressBar: true,
     })
-  }, [])
+  }, [playSuccess])
+
+  useEffect(() => {
+    const handleInteractionClick = (event) => {
+      const target = event.target.closest('button.btn, button.btn-icon, button.btn-add, button.btn-primary, button.btn-secondary, button.btn-search, button.logout-btn, button.btn-exportar, button.btn-reporte, a.nav-link')
+      if (!target) return
+      if (target.closest('.swal2-popup')) return
+      playClick()
+    }
+
+    document.addEventListener('click', handleInteractionClick)
+    return () => document.removeEventListener('click', handleInteractionClick)
+  }, [playClick])
 
     const fetchDashboardData = useCallback(
     async (selectedFincaId, month, year) => {
@@ -953,7 +981,6 @@ export default function AdminPanel() {
 
       if (res && res.success) {
         showNotification('Etapa actualizada correctamente', 'success')
-        playSuccess()
         const [updatedEtapas, updatedDetalle, updatedCosechas] = await Promise.all([
           fetchEtapasPorCultivo(selectedCultivoId),
           fetchCultivoDetalle(selectedCultivoId),
@@ -992,17 +1019,18 @@ export default function AdminPanel() {
     )
 
     if (!etapaId || Number.isNaN(etapaId)) {
-      console.error('ID de etapa inválido al eliminar etapa:', etapa)
-      showNotification('ID de etapa inválido para eliminar', 'error')
+      console.error('ID de etapa inválido al anular etapa:', etapa)
+      showNotification('ID de etapa inválido para anular', 'error')
       return
     }
 
+    playWarning()
     const confirmed = await Swal.fire({
-      title: '¿Eliminar etapa?',
-      text: '¿Seguro que deseas eliminar esta etapa? ',
+      title: '¿Anular etapa?',
+      text: '¿Seguro que deseas anular esta etapa? Esta acción anulará el registro.',
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Sí, eliminar',
+      confirmButtonText: 'Sí, anular',
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#dc3545',
       cancelButtonColor: '#ffffff',
@@ -1017,18 +1045,17 @@ export default function AdminPanel() {
     try {
       const res = await deleteEtapaForCultivo(etapaId)
       if (res && res.success) {
-        showNotification(res.message || 'Etapa eliminada correctamente', 'success')
-        playDisable()
+        showNotification(res.message || 'Etapa anulada correctamente', 'success')
         const updated = await fetchEtapasPorCultivo(selectedCultivoId)
         setEtapasCultivo(sortEtapasForDisplay(Array.isArray(updated) ? updated : []))
       } else {
-        console.error('Error eliminando etapa:', res)
-        showNotification(res?.message || 'Error eliminando etapa', 'error')
+        console.error('Error anulando etapa:', res)
+        showNotification(res?.message || 'Error anulando etapa', 'error')
         playError()
       }
     } catch (error) {
-      console.error('Error eliminando etapa:', error)
-      const message = error?.response?.data?.message || error?.message || 'Error eliminando etapa'
+      console.error('Error anulando etapa:', error)
+      const message = error?.response?.data?.message || error?.message || 'Error anulando etapa'
       showNotification(message, 'error')
     }
   }
@@ -1054,6 +1081,20 @@ export default function AdminPanel() {
     },
     [fincaId, showNotification]
   )
+
+  useEffect(() => {
+    localStorage.setItem('soundsEnabled', soundsEnabled)
+    setMute(!soundsEnabled)
+  }, [soundsEnabled, setMute])
+
+  useEffect(() => {
+    localStorage.setItem('darkModeEnabled', darkModeEnabled)
+    if (darkModeEnabled) {
+      document.documentElement.classList.add('dark-mode')
+    } else {
+      document.documentElement.classList.remove('dark-mode')
+    }
+  }, [darkModeEnabled])
 
   useEffect(() => {
     const id = window.setTimeout(() => {
@@ -1209,12 +1250,13 @@ export default function AdminPanel() {
   }
 
   const handleDeleteFinca = async (id) => {
+    playWarning()
     const result = await Swal.fire({
-      title: 'AgroGestion',
-      text: '¿Seguro que deseas eliminar esta finca? Esta acción no se puede deshacer.',
+      title: 'Archivar Finca',
+      text: '¿Seguro que deseas archivar esta finca? Esta acción archivará el registro.',
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Sí, eliminar',
+      confirmButtonText: 'Sí, archivar',
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#dc3545',
       cancelButtonColor: '#ffffff',
@@ -1228,12 +1270,11 @@ export default function AdminPanel() {
 
     try {
       await deleteFinca(id)
-      showNotification('Finca eliminada correctamente', 'success')
-      playDisable()
+      showNotification('Finca archivada correctamente', 'success')
       setFincasRefresh((prev) => prev + 1)
     } catch (error) {
       console.error(error)
-      const message = error?.response?.data?.error || 'Error eliminando la finca'
+      const message = error?.response?.data?.error || 'Error archivando la finca'
       showNotification(message, 'error')
       playError()
     }
@@ -1600,12 +1641,13 @@ export default function AdminPanel() {
   }
 
   const handleDeleteCosto = async (costo) => {
+    playWarning()
     const result = await Swal.fire({
-      title: 'Eliminar Costo',
-      text: '¿Seguro que deseas eliminar este costo? Esta acción no se puede deshacer.',
+      title: 'Anular Costo',
+      text: '¿Seguro que deseas anular este costo? Esta acción anulará el registro.',
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Sí, eliminar',
+      confirmButtonText: 'Sí, anular',
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#dc3545',
       cancelButtonColor: '#ffffff',
@@ -1620,7 +1662,7 @@ export default function AdminPanel() {
     try {
       const response = await deleteCosto(costo.id)
       if (!response.success) {
-        showNotification(response.message || 'No se pudo eliminar el costo', 'error')
+        showNotification(response.message || 'No se pudo anular el costo', 'error')
         playError()
         return
       }
@@ -1629,11 +1671,10 @@ export default function AdminPanel() {
       } else {
         setDetalleCostos((prev) => prev.filter((item) => item.id !== costo.id))
       }
-      showNotification('Costo eliminado exitosamente', 'success')
-      playDisable()
+      showNotification('Costo anulado exitosamente', 'success')
     } catch (error) {
-      console.error('Error eliminando costo:', error)
-      const errMsg = error?.response?.data?.message || 'Error al eliminar el costo'
+      console.error('Error anulando costo:', error)
+      const errMsg = error?.response?.data?.message || 'Error al anular el costo'
       showNotification(errMsg, 'error')
       playError()
     }
@@ -1721,6 +1762,7 @@ export default function AdminPanel() {
   }
 
   const handleDeleteCosecha = async (cosecha) => {
+    playWarning()
     const result = await Swal.fire({
       title: 'Eliminar Cosecha',
       text: '¿Seguro que deseas eliminar esta cosecha? Esta acción no se puede deshacer.',
@@ -1747,7 +1789,6 @@ export default function AdminPanel() {
       }
       setDetalleCosechas((prev) => prev.filter((item) => item.id !== cosecha.id))
       showNotification('Cosecha eliminada exitosamente', 'success')
-      playDisable()
     } catch (error) {
       console.error('Error eliminando cosecha:', error)
       const errMsg = error?.response?.data?.message || 'Error al eliminar la cosecha'
@@ -1828,12 +1869,13 @@ export default function AdminPanel() {
 
   // Elimina un usuario después de pedir confirmación.
   const handleDeleteUser = async (id) => {
+    playWarning()
     const result = await Swal.fire({
-      title: 'Eliminar Usuario',
-      text: '¿Seguro que deseas eliminar este usuario? Esta acción no se puede deshacer.',
+      title: 'Desactivar Usuario',
+      text: '¿Seguro que deseas desactivar este usuario? Esta acción desactivará su acceso.',
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Sí, eliminar',
+      confirmButtonText: 'Sí, desactivar',
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#dc3545',
       cancelButtonColor: '#ffffff',
@@ -1857,18 +1899,18 @@ export default function AdminPanel() {
       setActiveUsuarioId(null)
       setAsignacionesOpen(false)
     }
-    showNotification('Usuario eliminado exitosamente', 'success')
-    playDisable()
+    showNotification('Usuario desactivado exitosamente', 'success')
   }
 
   // Elimina un cultivo después de pedir confirmación.
   const handleDeleteCultivo = async (id) => {
+    playWarning()
     const result = await Swal.fire({
-      title: 'Eliminar Cultivo',
-      text: '¿Seguro que deseas eliminar este cultivo? Esta acción no se puede deshacer.',
+      title: 'Archivar Cultivo',
+      text: '¿Seguro que deseas archivar este cultivo? Esta acción archivará el registro.',
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Sí, eliminar',
+      confirmButtonText: 'Sí, archivar',
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#dc3545',
       cancelButtonColor: '#ffffff',
@@ -1892,8 +1934,7 @@ export default function AdminPanel() {
       setActiveCultivoId(null)
       setAsignacionesOpen(false)
     }
-    showNotification('Cultivo eliminado exitosamente', 'success')
-    playDisable()
+    showNotification('Cultivo archivado exitosamente', 'success')
   }
    
 
@@ -2288,7 +2329,6 @@ export default function AdminPanel() {
     }
 
     showNotification(successMessage, 'success')
-    playSuccess()
     handleCloseDynamicModal()
   }
 
@@ -2531,7 +2571,7 @@ export default function AdminPanel() {
     if (etapasFiltradas.length === 0) {
       return (
         <tr className="data-item">
-          <td colSpan={7} style={{ textAlign: 'center' }}>No hay etapas registradas</td>
+          <td colSpan={6} style={{ textAlign: 'center' }}>No hay etapas registradas</td>
         </tr>
       )
     }
@@ -2552,11 +2592,10 @@ export default function AdminPanel() {
               {etapa.estado.replace('-', ' ')}
             </span>
           </td>
-          <td data-field="estado-registro"></td>
           <td data-field="acciones">
             <div className="action-buttons">
               <button type="button" className="btn-icon btn-edit" title="Editar" onClick={() => handleOpenEditEtapa(etapa)}>{'\u270F\uFE0F'}</button>
-              <button type="button" className="btn-icon btn-delete" title="Eliminar" onClick={() => handleDeleteEtapa(etapa)}>{'\uD83D\uDEAB'}</button>
+              <button type="button" className="btn-icon btn-delete" title="Anular" onClick={() => handleDeleteEtapa(etapa)}>{'\uD83D\uDEAB'}</button>
             </div>
           </td>
         </tr>
@@ -2655,6 +2694,7 @@ export default function AdminPanel() {
 
   // Cierra sesión y redirige a la página de inicio.
   const onLogout = async () => {
+    playWarning()
     const result = await Swal.fire({
       title: 'AgroGestion',
       text: '¿Estás seguro de que deseas cerrar sesión?',
@@ -2723,7 +2763,15 @@ export default function AdminPanel() {
     },
     {
       title: 'Análisis',
-      links: [{ section: 'rentabilidad', label: 'Rentabilidad', icon: '📈' }],
+      links: [
+        { section: 'rentabilidad', label: 'Rentabilidad', icon: '📈' },
+      ],
+    },
+    {
+      title: 'Configuración',
+      links: [
+        { section: 'configuracion', label: 'Configuración', icon: '⚙️' },
+      ],
     },
   ]
 
@@ -3070,26 +3118,25 @@ export default function AdminPanel() {
               <table className="data-table">
                 <thead>
                   <tr className="table-title-row">
-                    <th colSpan={5}>Fincas Registradas</th>
+                    <th colSpan={4}>Fincas Registradas</th>
                   </tr>
                   <tr>
                     <th>Nombre</th>
                     <th>Ubicación</th>
                     <th>Cultivos activos</th>
-                    <th>Estado Registro</th>
                     <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoadingFincas ? (
                     <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', padding: '20px' }}>
+                      <td colSpan={4} style={{ textAlign: 'center', padding: '20px' }}>
                         Cargando fincas...
                       </td>
                     </tr>
                   ) : fincas.length === 0 ? (
                     <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', padding: '20px' }}>
+                      <td colSpan={4} style={{ textAlign: 'center', padding: '20px' }}>
                         No hay fincas registradas.
                       </td>
                     </tr>
@@ -3101,7 +3148,6 @@ export default function AdminPanel() {
                           <td data-field="nombre">{finca.nombre}</td>
                           <td data-field="ubicacion">{finca.ubicacion || '--'}</td>
                           <td data-field="cultivos">{cultivosActivos}</td>
-                          <td data-field="estado-registro"></td>
                           <td data-field="acciones">
                             <div className="action-buttons">
                               <button
@@ -3115,7 +3161,7 @@ export default function AdminPanel() {
                               <button
                                 type="button"
                                 className="btn-icon btn-delete"
-                                title="Eliminar"
+                                title="Archivar"
                                 onClick={() => handleDeleteFinca(finca.id)}
                               >
                                 {'\uD83D\uDCC2'}
@@ -3158,14 +3204,13 @@ export default function AdminPanel() {
               <table className="data-table">
                 <thead>
                   <tr className="table-title-row">
-                    <th colSpan={6}>Usuarios Registrados</th>
+                    <th colSpan={5}>Usuarios Registrados</th>
                   </tr>
                   <tr>
                     <th>Nombre</th>
                     <th>Email</th>
                     <th>Contraseña</th>
                     <th>Rol</th>
-                    <th>Estado Registro</th>
                     <th>Acciones</th>
                   </tr>
                 </thead>
@@ -3189,7 +3234,6 @@ export default function AdminPanel() {
                         <td data-field="email">{usuario.email}</td>
                         <td data-field="password">{usuario.password}</td>
                         <td data-field="rol">{usuario.rol}</td>
-                        <td data-field="estado-registro"></td>
                         <td data-field="acciones">
                           <div className="action-buttons">
                             <button
@@ -3206,7 +3250,7 @@ export default function AdminPanel() {
                             <button
                               type="button"
                               className="btn-icon btn-delete"
-                              title="Eliminar"
+                              title="Desactivar"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleDeleteUser(usuario.id)
@@ -3221,7 +3265,7 @@ export default function AdminPanel() {
                   })}
                   {filteredUsers.length === 0 && filtroUsuario.trim().length > 0 && (
                     <tr>
-                      <td colSpan={6} className="no-results-row">
+                      <td colSpan={5} className="no-results-row">
                         Usuario no encontrado
                       </td>
                     </tr>
@@ -3324,7 +3368,7 @@ export default function AdminPanel() {
               <table className="data-table">
                 <thead>
                   <tr className="table-title-row">
-                    <th colSpan={8}>Cultivos Registrados</th>
+                    <th colSpan={7}>Cultivos Registrados</th>
                   </tr>
                   <tr>
                     <th>Nombre</th>
@@ -3333,7 +3377,6 @@ export default function AdminPanel() {
                     <th>Fecha Final</th>
                     <th>Etapa Actual</th>
                     <th>Estado</th>
-                    <th>Estado Registro</th>
                     <th>Acciones</th>
                   </tr>
                 </thead>
@@ -3368,7 +3411,6 @@ export default function AdminPanel() {
                             })()
                           }
                         </td>
-                        <td data-field="estado-registro"></td>
                         <td data-field="acciones">
                           <div className="action-buttons">
                             <button
@@ -3382,7 +3424,7 @@ export default function AdminPanel() {
                             >
                               {'\u270F\uFE0F'}
                             </button>
-                            <button type="button" className="btn-icon btn-delete" title="Eliminar"
+                            <button type="button" className="btn-icon btn-delete" title="Archivar"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleDeleteCultivo(c.id)
@@ -3396,7 +3438,7 @@ export default function AdminPanel() {
                     ))
                   ) : (
                     <tr className="data-item">
-                      <td colSpan={8} style={{ textAlign: 'center', color: '#666' }}>
+                      <td colSpan={7} style={{ textAlign: 'center', color: '#666' }}>
                         No hay cultivos registrados en esta finca
                       </td>
                     </tr>
@@ -3473,7 +3515,7 @@ export default function AdminPanel() {
                     <table className="data-table">
                       <thead>
                         <tr className="table-title-row">
-                          <th colSpan={7}>Etapas Registradas</th>
+                          <th colSpan={6}>Etapas Registradas</th>
                         </tr>
                         <tr>
                           <th>Nombre</th>
@@ -3481,7 +3523,6 @@ export default function AdminPanel() {
                           <th>Fecha Inicio</th>
                           <th>Fecha Final</th>
                           <th>Estado</th>
-                          <th>Estado Registro</th>
                           <th>Acciones</th>
                         </tr>
                       </thead>
@@ -3524,7 +3565,7 @@ export default function AdminPanel() {
                     <table className="data-table">
                       <thead>
                         <tr className="table-title-row">
-                          <th colSpan={7}>Cosechas Realizadas</th>
+                          <th colSpan={6}>Cosechas Realizadas</th>
                         </tr>
                         <tr>
                           <th>Fecha</th>
@@ -3532,20 +3573,19 @@ export default function AdminPanel() {
                           <th>Unidad Medida</th>
                           <th>Precio</th>
                           <th>Tipo Precio</th>
-                          <th>Estado Registro</th>
                           <th>Acciones</th>
                         </tr>
                       </thead>
                       <tbody>
                         {isLoadingDetalleCosechas ? (
                           <tr className="data-item">
-                            <td colSpan={7} style={{ textAlign: 'center' }}>
+                            <td colSpan={6} style={{ textAlign: 'center' }}>
                               Cargando cosechas...
                             </td>
                           </tr>
                         ) : filteredCosechas.length === 0 ? (
                           <tr className="data-item">
-                            <td colSpan={7} style={{ textAlign: 'center' }}>
+                            <td colSpan={6} style={{ textAlign: 'center' }}>
                               No hay cosechas registradas
                             </td>
                           </tr>
@@ -3557,13 +3597,12 @@ export default function AdminPanel() {
                               <td data-field="unidad">{cosecha.unidad || cosecha.unidad_medida || cosecha.unidad?.nombre || cosecha.unidadMedida}</td>
                               <td data-field="precio">{formatPrecioValue(cosecha.precio || cosecha.precio_unitario)}</td>
                               <td data-field="tipo-precio">{cosecha.tipoPrecio || cosecha.tipoprecio || cosecha.tipoPrecio?.nombre || cosecha.tipo_precio || cosecha.tipoPrecioId || cosecha.tipoprecioid || ''}</td>
-                              <td data-field="estado-registro"></td>
                               <td data-field="acciones">
                                 <div className="action-buttons">
                                   <button type="button" className="btn-icon btn-edit" title="Editar" onClick={() => handleOpenEditCosecha(cosecha)}>
                                     {'\u270F\uFE0F'}
                                   </button>
-                                  <button type="button" className="btn-icon btn-delete" title="Eliminar" onClick={() => handleDeleteCosecha(cosecha)}>
+                                  <button type="button" className="btn-icon btn-delete" title="Anular" onClick={() => handleDeleteCosecha(cosecha)}>
                                     {'\uD83D\uDEAB'}
                                   </button>
                                 </div>
@@ -3662,7 +3701,7 @@ export default function AdminPanel() {
                     <table className="data-table costos-table">
                       <thead>
                         <tr className="table-title-row">
-                          <th colSpan={10}>Costos Registrados del Cultivo</th>
+                          <th colSpan={9}>Costos Registrados del Cultivo</th>
                         </tr>
                         <tr>
                           <th>Fecha</th>
@@ -3673,26 +3712,25 @@ export default function AdminPanel() {
                           <th>Info Adicional</th>
                           <th>Valor</th>
                           <th>Estado</th>
-                          <th>Estado Registro</th>
                           <th>Acciones</th>
                         </tr>
                       </thead>
                       <tbody>
                         {isLoadingDetalleCostos ? (
                           <tr>
-                            <td colSpan={10} style={{ textAlign: 'center', padding: '20px' }}>
+                            <td colSpan={9} style={{ textAlign: 'center', padding: '20px' }}>
                               Cargando costos del cultivo...
                             </td>
                           </tr>
                         ) : detallesCostosOrdenados.length === 0 ? (
                           <tr>
-                            <td colSpan={10} style={{ textAlign: 'center', padding: '20px' }}>
+                            <td colSpan={9} style={{ textAlign: 'center', padding: '20px' }}>
                               No hay costos registrados para este cultivo.
                             </td>
                           </tr>
                         ) : visibleCostos.length === 0 ? (
                           <tr>
-                            <td colSpan={10} style={{ textAlign: 'center', padding: '20px' }}>
+                            <td colSpan={9} style={{ textAlign: 'center', padding: '20px' }}>
                               No se encontraron costos con los filtros aplicados.
                             </td>
                           </tr>
@@ -3803,7 +3841,6 @@ export default function AdminPanel() {
                                     {estadoLabel}
                                   </span>
                                 </td>
-                                <td data-field="estado-registro"></td>
                                 <td data-field="acciones">
                                   <div className="action-buttons">
                                     <button
@@ -3820,7 +3857,7 @@ export default function AdminPanel() {
                                     <button
                                       type="button"
                                       className="btn-icon btn-delete"
-                                      title="Eliminar"
+                                      title="Anular"
                                       onClick={async (e) => {
                                         e.stopPropagation()
                                         await handleDeleteCosto(costo)
@@ -4155,7 +4192,7 @@ export default function AdminPanel() {
                               }}>
                                 {'\u270F\uFE0F'}
                               </button>
-                              <button type="button" className="btn-icon btn-delete" title="Eliminar" onClick={(event) => {
+                              <button type="button" className="btn-icon btn-delete" title="Anular" onClick={(event) => {
                                 event.stopPropagation()
                                 handleDeleteCosto(costo)
                               }}>
@@ -4219,6 +4256,44 @@ export default function AdminPanel() {
           </section>
 
           {/* Sección de rentabilidad: gráficos comparativos y tabla de márgenes. */}
+          <section id="configuracion-section" className={`content-section ${activeSection === 'configuracion' ? 'active' : ''}`}>
+            <div className="section-header">
+              <h2>Configuración</h2>
+            </div>
+
+            <div className="config-section">
+              <div className="config-card">
+                <div>
+                  <h3>Sonidos del Sistema</h3>
+                  <p>Activa o desactiva todos los efectos de sonido del panel administrativo.</p>
+                </div>
+                <label className="toggle-switch">
+                  <input
+                    type="checkbox"
+                    checked={soundsEnabled}
+                    onChange={() => setSoundsEnabled((prev) => !prev)}
+                  />
+                  <span className="slider"></span>
+                </label>
+              </div>
+
+              <div className="config-card">
+                <div>
+                  <h3>Modo Oscuro</h3>
+                  <p>Activa el tema oscuro en toda la aplicación administrativa.</p>
+                </div>
+                <label className="toggle-switch">
+                  <input
+                    type="checkbox"
+                    checked={darkModeEnabled}
+                    onChange={() => setDarkModeEnabled((prev) => !prev)}
+                  />
+                  <span className="slider"></span>
+                </label>
+              </div>
+            </div>
+          </section>
+
           <section id="rentabilidad-section" className={`content-section ${activeSection === 'rentabilidad' ? 'active' : ''}`}>
             <div className="section-header">
               <h2>Análisis de Rentabilidad</h2>

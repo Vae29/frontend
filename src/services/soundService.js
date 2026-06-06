@@ -88,12 +88,14 @@ class SoundService {
   }
 
   /**
-   * Sonido de advertencia - tono ascendente ligero
-   * Usado para: validaciones, advertencias, acciones que requieren atención
+   * Sonido de advertencia - secuencia suave y distintiva
+   * Usado para: confirmaciones sensibles, advertencias y acciones críticas
    */
   playWarning() {
-    // Tono único: 587 Hz (D5) - 120ms
-    this.playTone(587, 0.12, 'sine');
+    // Tono 1: 440 Hz (A4) - 90ms
+    this.playTone(440, 0.09, 'triangle');
+    // Tono 2: 523 Hz (C5) - 90ms, después de 80ms
+    setTimeout(() => this.playTone(523, 0.09, 'triangle'), 80);
   }
 
   /**
@@ -103,6 +105,15 @@ class SoundService {
   playConfirm() {
     // Tono único: 554 Hz (C#5) - 100ms
     this.playTone(554, 0.1, 'sine');
+  }
+
+  /**
+   * Sonido de interacción - click corto y discreto
+   * Usado para: botones principales, navegación y formularios
+   */
+  playClick() {
+    // Tono único: 880 Hz (A5) - 45ms
+    this.playTone(880, 0.045, 'triangle');
   }
 
   /**

@@ -719,3 +719,55 @@
 .badge-info {
     background-color: var(--status-proceso);
 }
+
+/* ==========================================
+   ESTILOS DARK MODE PARA KPI Y CHARTS
+   ========================================== */
+
+html.dark-mode .kpi-card {
+    background: linear-gradient(135deg, #1E2F28 0%, #243A31 100%);
+    border-color: rgba(125, 255, 176, 0.15);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+}
+
+html.dark-mode .kpi-card:hover {
+    box-shadow: 0 12px 32px rgba(125, 255, 176, 0.15);
+    transform: translateY(-8px);
+}
+
+html.dark-mode .kpi-card::before {
+    background: linear-gradient(90deg, #7DFFB0, rgba(125, 255, 176, 0.6));
+}
+
+html.dark-mode .kpi-header h3 {
+    color: #D6D6D6;
+}
+
+html.dark-mode .kpi-value {
+    color: #7DFFB0;
+}
+
+html.dark-mode .kpi-subtext {
+    color: #B0B0B0;
+}
+
+html.dark-mode .chart-card {
+    background-color: #1E2F28;
+    border-color: rgba(125, 255, 176, 0.15);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+}
+
+html.dark-mode .chart-card h3 {
+    color: #F3F4F6;
+    border-bottom-color: rgba(125, 255, 176, 0.15);
+}
+
+html.dark-mode .cultivo-card {
+    background-color: #1E2F28;
+    border-left-color: #7DFFB0;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+}
+
+html.dark-mode .cultivo-card:hover {
+    box-shadow: 0 12px 32px rgba(125, 255, 176, 0.15);
+}

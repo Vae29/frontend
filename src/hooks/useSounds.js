@@ -31,6 +31,10 @@ export const useSounds = () => {
     soundService.playComplete();
   }, []);
 
+  const playClick = useCallback(() => {
+    soundService.playClick();
+  }, []);
+
   const setMute = useCallback((mute) => {
     soundService.setMute(mute);
   }, []);
@@ -54,6 +58,7 @@ export const useSounds = () => {
     playWarning,
     playConfirm,
     playComplete,
+    playClick,
     setMute,
     setVolume,
     isMuted,
