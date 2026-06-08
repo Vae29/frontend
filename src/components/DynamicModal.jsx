@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { getModalConfig, validateForm, validateField } from '../utils/modalConfig'
+import { getModalConfig, validateForm, validateField, normalizeModalTextFields } from '../utils/modalConfig'
 
 /**
  * Componente de modal dinámico que cambia su contenido según el tipo
@@ -64,7 +64,7 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
   }, [isOpen, modalType, initialData])
 
   const handleInputChange = (e) => {
-    const { name, value, type, multiple, options } = e.target
+    const { name, value, multiple, options } = e.target
     const field = config.fields.find((f) => f.name === name)
     let nextValue = multiple
       ? Array.from(options).filter((option) => option.selected).map((option) => option.value)
@@ -74,10 +74,19 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
       nextValue = formatCurrencyInput(nextValue)
     }
 
-    setFormData((prev) => ({
-      ...prev,
-      [name]: nextValue,
-    }))
+    setFormData((prev) => {
+      const nextFormData = {
+        ...prev,
+        [name]: nextValue,
+      }
+
+      if (name === 'departamento') {
+        nextFormData.municipio = ''
+      }
+
+      return nextFormData
+    })
+
     if (typeof onFieldChange === 'function') onFieldChange(name, nextValue)
     // Limpiar error del campo cuando el usuario empieza a escribir
     if (errors[name]) {
@@ -125,14 +134,15 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
 
     // Enviar los datos
     try {
-      await onSubmit(formData)
+      const normalizedData = normalizeModalTextFields(formData)
+      const submitResult = await onSubmit(normalizedData)
+      if (submitResult === true) {
+        setFormData({})
+        setErrors({})
+      }
     } catch (submitError) {
       console.error('Error submitting modal form:', submitError)
     }
-
-    // Resetear el formulario
-    setFormData({})
-    setErrors({})
   }
 
   const handleCancel = () => {

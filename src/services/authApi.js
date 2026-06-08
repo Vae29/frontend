@@ -66,9 +66,11 @@ export async function refreshSession() {
   }
 }
 
-export async function fetchUsers() {
+export async function fetchUsers(estado = 'ACTIVO') {
   try {
-    const response = await httpClient.get('/auth/users');
+    const response = await httpClient.get('/auth/users', {
+      params: { estado }
+    });
 
     if (response.data.success && response.data.data) {
       return {
@@ -155,6 +157,34 @@ export async function deleteUser(id) {
     };
   } catch (error) {
     console.error('Error en deleteUser:', error);
+    return {
+      success: false,
+      message: error.response?.data?.message || 'Error de conexión con el servidor',
+    };
+  }
+}
+
+export async function changeUserState(id, nuevoEstado, motivo) {
+  try {
+    const response = await httpClient.patch(`/auth/users/${id}/state`, {
+      nuevoEstado,
+      motivo,
+    });
+
+    if (response.data.success) {
+      return {
+        success: true,
+        data: response.data.data,
+        message: response.data.message,
+      };
+    }
+
+    return {
+      success: false,
+      message: response.data.message || 'Error al cambiar el estado del usuario',
+    };
+  } catch (error) {
+    console.error('Error en changeUserState:', error);
     return {
       success: false,
       message: error.response?.data?.message || 'Error de conexión con el servidor',

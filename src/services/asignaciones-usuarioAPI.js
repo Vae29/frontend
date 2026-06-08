@@ -78,9 +78,11 @@ export async function fetchCultivosEnProceso() {
   }
 }
 
-export async function fetchCultivosPorUsuario(fincaId = null) {
+export async function fetchCultivosPorUsuario(fincaId = null, estado = 'ACTIVO') {
   try {
-    const response = await httpClient.get('/api/usuario/me/cultivos', { params: fincaId ? { fincaId } : {} });
+    const params = { estado }
+    if (fincaId) params.fincaId = fincaId
+    const response = await httpClient.get('/api/usuario/me/cultivos', { params });
 
     if (response.data.success && response.data.data) {
       return {

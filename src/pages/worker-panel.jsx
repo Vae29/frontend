@@ -8,6 +8,8 @@ import useAuthSession from '../hooks/useAuthSession'
 import { getInventarioElementos } from '../utils/inventarioElementos'
 import { MODAL_TYPES } from '../utils/modalConfig'
 import { DynamicModal } from '../components/DynamicModal'
+import ReasonModal from '../components/ReasonModal'
+import { StateFilterMenu } from '../components/StateFilters'
 import { fetchFincasPorUsuario, fetchCultivosPorUsuario } from '../services/asignaciones-usuarioAPI'
 import {
   fetchCultivoDetalle,
@@ -31,6 +33,9 @@ import {
   createCosecha,
   updateCosecha,
   deleteCosecha,
+  changeEtapaState,
+  changeCostoState,
+  changeCosechaState,
 } from '../services/cultivoService'
 import Header from '../components/Header'
 import Sidebar from '../components/Sidebar'
@@ -176,6 +181,12 @@ function normalizeStateValue(value) {
   return normEtapaKey(String(value || ''))
 }
 
+function getRegistroEstado(item) {
+  if (!item || typeof item !== 'object') return null
+  const raw = item.estado_registro ?? item.estadoRegistro
+  return raw != null ? String(raw).trim().toUpperCase() : null
+}
+
 export default function WorkerPanel() {
   const navigate = useNavigate()
   const session = useAuthSession()
@@ -221,12 +232,24 @@ export default function WorkerPanel() {
   const [cosechaFilterFechaDesde, setCosechaFilterFechaDesde] = useState('')
   const [cosechaFilterFechaHasta, setCosechaFilterFechaHasta] = useState('')
   const [filterEstadoPago, setFilterEstadoPago] = useState('todos')
+  
+  // Estado para menús de detalle (etapas, cosechas, costos)
+  const [etapasEstado, setEtapasEstado] = useState('ACTIVO')
+  const [detalleCostosEstado, setDetalleCostosEstado] = useState('ACTIVO')
+  const [detalleCosechasEstado, setDetalleCosechasEstado] = useState('ACTIVO')
 
   const [showDynamicModal, setShowDynamicModal] = useState(false)
   const [dynamicModalType, setDynamicModalType] = useState(null)
   const [modalFieldOptions, setModalFieldOptions] = useState({})
   const [modalInitialData, setModalInitialData] = useState(undefined)
   const [editingEtapa, setEditingEtapa] = useState(null)
+  const [reasonModal, setReasonModal] = useState({
+    isOpen: false,
+    title: '',
+    question: '',
+    callback: null,
+    cancelCallback: null,
+  })
   const [editingCosecha, setEditingCosecha] = useState(null)
   const [editingCosto, setEditingCosto] = useState(null)
   const [activeCostoEtapaId, setActiveCostoEtapaId] = useState(null)
@@ -250,10 +273,10 @@ export default function WorkerPanel() {
   const [isLoadingFincas, setIsLoadingFincas] = useState(false)
 
   const trabajadorFincas = useMemo(() => (worker ? Agro.getTrabajadorFincas(worker.id) : []), [worker])
-  const fincasAsignadas = useMemo(
-    () => (usuarioFincas.length > 0 ? usuarioFincas : trabajadorFincas),
-    [usuarioFincas, trabajadorFincas],
-  )
+  const fincasAsignadas = useMemo(() => {
+    const sourceFincas = usuarioFincas.length > 0 ? usuarioFincas : trabajadorFincas
+    return sourceFincas.filter((finca) => getRegistroEstado(finca) === 'ACTIVO')
+  }, [usuarioFincas, trabajadorFincas])
 
   const [cultivosFinca, setCultivosFinca] = useState([])
   const [isLoadingCultivosFinca, setIsLoadingCultivosFinca] = useState(false)
@@ -421,6 +444,47 @@ export default function WorkerPanel() {
 
     loadCultivoDetails()
   }, [selectedCultivo])
+
+  const refreshCultivoDetalleData = async () => {
+    if (!selectedCultivo) return
+    const cultivoId = selectedCultivo.id
+
+    try {
+      setIsLoadingCostos(true)
+      const detalle = await fetchCultivoDetalle(cultivoId)
+      const costs = Array.isArray(detalle)
+        ? detalle
+        : detalle?.costos || detalle?.detalle || detalle?.detalleCostos || []
+      setDetalleCostos(Array.isArray(costs) ? costs : [])
+    } catch (error) {
+      console.error('Error recargando costos del cultivo:', error)
+      setDetalleCostos([])
+    } finally {
+      setIsLoadingCostos(false)
+    }
+
+    try {
+      setIsLoadingEtapas(true)
+      const etapas = await fetchEtapasPorCultivo(cultivoId)
+      setEtapasCultivo(Array.isArray(etapas) ? sortEtapasForDisplay(etapas) : [])
+    } catch (error) {
+      console.error('Error recargando etapas del cultivo:', error)
+      setEtapasCultivo([])
+    } finally {
+      setIsLoadingEtapas(false)
+    }
+
+    try {
+      setIsLoadingCosechas(true)
+      const cosechas = await fetchCosechasPorCultivo(cultivoId)
+      setDetalleCosechas(Array.isArray(cosechas) ? cosechas : [])
+    } catch (error) {
+      console.error('Error recargando cosechas del cultivo:', error)
+      setDetalleCosechas([])
+    } finally {
+      setIsLoadingCosechas(false)
+    }
+  }
 
   const showNotification = useCallback((message, type = 'info') => {
     Swal.fire({
@@ -698,16 +762,16 @@ export default function WorkerPanel() {
       etapa?.idEtapaCultivo
     )
     if (!etapaId || Number.isNaN(etapaId)) {
-      showNotification('ID de etapa inválido para eliminar', 'error')
+      showNotification('ID de etapa inválido para anular', 'error')
       return
     }
 
-    const result = await Swal.fire({
-      title: '¿Eliminar etapa?',
-      text: '¿Seguro que deseas eliminar esta etapa?',
+    const confirmed = await Swal.fire({
+      title: 'Etapa 🚫',
+      text: `Esta etapa dejará de participar en el seguimiento del cultivo.\n\nSi solo necesita corregir información, puede editar la etapa sin anularla.\n\n¿Desea continuar?`,
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Sí, eliminar',
+      confirmButtonText: 'Sí, anular',
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#dc3545',
       cancelButtonColor: '#ffffff',
@@ -716,22 +780,31 @@ export default function WorkerPanel() {
         confirmButton: 'custom-confirm-btn',
       },
     })
-    if (!result.isConfirmed) return
+    if (!confirmed.isConfirmed) return
 
-    try {
-      const res = await deleteEtapaForCultivo(etapaId)
-      if (res && res.success) {
-        showNotification('Etapa eliminada correctamente', 'success')
-        const updated = await fetchEtapasPorCultivo(selectedCultivo.id)
-        setEtapasCultivo(Array.isArray(updated) ? sortEtapasForDisplay(updated) : [])
-      } else {
-        showNotification(res?.message || 'Error eliminando etapa', 'error')
-      }
-    } catch (error) {
-      console.error('Error eliminando etapa:', error)
-      const message = error?.response?.data?.message || error?.message || 'Error eliminando etapa'
-      showNotification(message, 'error')
-    }
+    setReasonModal({
+      isOpen: true,
+      title: 'Anular Etapa',
+      question: 'Indica el motivo por el cual se anula la etapa',
+      callback: async (motivo) => {
+        try {
+          const res = await changeEtapaState(etapaId, 'ANULADO', motivo)
+          if (res && res.success) {
+            showNotification('Etapa anulada correctamente', 'success')
+            await refreshCultivoDetalleData()
+          } else {
+            showNotification(res?.message || 'Error anulando etapa', 'error')
+          }
+        } catch (error) {
+          console.error('Error anulando etapa:', error)
+          const message = error?.response?.data?.message || error?.message || 'Error anulando etapa'
+          showNotification(message, 'error')
+        } finally {
+          setReasonModal((r) => ({ ...r, isOpen: false }))
+        }
+      },
+      cancelCallback: () => setReasonModal((r) => ({ ...r, isOpen: false })),
+    })
   }
 
   const handleOpenAgregarCosecha = async () => {
@@ -901,12 +974,12 @@ export default function WorkerPanel() {
       return
     }
 
-    const result = await Swal.fire({
-      title: 'Eliminar Cosecha',
-      text: '¿Seguro que deseas eliminar esta cosecha? Esta acción no se puede deshacer.',
+    const confirmed = await Swal.fire({
+      title: 'Cosecha 🚫',
+      text: `Esta cosecha dejará de participar en los análisis de producción e ingresos.\n\nSi el registro contiene errores, puede editarla en lugar de anularla.\n\n¿Desea continuar?`,
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Sí, eliminar',
+      confirmButtonText: 'Sí, anular',
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#dc3545',
       cancelButtonColor: '#ffffff',
@@ -915,22 +988,31 @@ export default function WorkerPanel() {
         confirmButton: 'custom-confirm-btn',
       },
     })
-    if (!result.isConfirmed) return
+    if (!confirmed.isConfirmed) return
 
-    try {
-      const res = await deleteCosecha(cosechaId)
-      if (res && res.success) {
-        showNotification('Cosecha eliminada correctamente', 'success')
-        const updated = await fetchCosechasPorCultivo(selectedCultivo.id)
-        setDetalleCosechas(Array.isArray(updated) ? updated : [])
-      } else {
-        showNotification(res?.message || 'No se pudo eliminar la cosecha', 'error')
-      }
-    } catch (error) {
-      console.error('Error eliminando cosecha:', error)
-      const message = error?.response?.data?.message || error?.message || 'Error al eliminar cosecha'
-      showNotification(message, 'error')
-    }
+    setReasonModal({
+      isOpen: true,
+      title: 'Anular Cosecha',
+      question: 'Indica el motivo por el cual se anula la cosecha',
+      callback: async (motivo) => {
+        try {
+          const res = await changeCosechaState(cosechaId, 'ANULADO', motivo)
+          if (res && res.success) {
+            await refreshCultivoDetalleData()
+            showNotification('Cosecha anulada correctamente', 'success')
+          } else {
+            showNotification(res?.message || 'No se pudo anular la cosecha', 'error')
+          }
+        } catch (error) {
+          console.error('Error anulando cosecha:', error)
+          const message = error?.response?.data?.message || error?.message || 'Error anulando cosecha'
+          showNotification(message, 'error')
+        } finally {
+          setReasonModal((r) => ({ ...r, isOpen: false }))
+        }
+      },
+      cancelCallback: () => setReasonModal((r) => ({ ...r, isOpen: false })),
+    })
   }
 
   const handleOpenAddCosto = async () => {
@@ -1129,12 +1211,12 @@ export default function WorkerPanel() {
       return
     }
 
-    const result = await Swal.fire({
-      title: 'Eliminar Costo',
-      text: '¿Seguro que deseas eliminar este costo? Esta acción no se puede deshacer.',
+    const confirmed = await Swal.fire({
+      title: 'Costo 🚫',
+      text: `Este costo dejará de participar en los análisis y reportes económicos del sistema.\n\nSi el registro contiene información incorrecta, puede editarlo en lugar de anularlo.\n\n¿Desea continuar?`,
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Sí, eliminar',
+      confirmButtonText: 'Sí, anular',
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#dc3545',
       cancelButtonColor: '#ffffff',
@@ -1143,25 +1225,31 @@ export default function WorkerPanel() {
         confirmButton: 'custom-confirm-btn',
       },
     })
-    if (!result.isConfirmed) return
+    if (!confirmed.isConfirmed) return
 
-    try {
-      const res = await deleteCosto(costoId)
-      if (res && res.success) {
-        showNotification('Costo eliminado exitosamente', 'success')
-        const detalle = await fetchCultivoDetalle(selectedCultivo.id)
-        const costs = Array.isArray(detalle)
-          ? detalle
-          : detalle?.costos || detalle?.detalle || detalle?.detalleCostos || []
-        setDetalleCostos(Array.isArray(costs) ? costs : [])
-      } else {
-        showNotification(res?.message || 'No se pudo eliminar el costo', 'error')
-      }
-    } catch (error) {
-      console.error('Error eliminando costo:', error)
-      const message = error?.response?.data?.message || error?.message || 'Error al eliminar el costo'
-      showNotification(message, 'error')
-    }
+    setReasonModal({
+      isOpen: true,
+      title: 'Anular Costo',
+      question: 'Indica el motivo por el cual se anula el costo',
+      callback: async (motivo) => {
+        try {
+          const res = await changeCostoState(costoId, 'ANULADO', motivo)
+          if (res && res.success) {
+            await refreshCultivoDetalleData()
+            showNotification('Costo anulado correctamente', 'success')
+          } else {
+            showNotification(res?.message || 'No se pudo anular el costo', 'error')
+          }
+        } catch (error) {
+          console.error('Error anulando costo:', error)
+          const message = error?.response?.data?.message || error?.message || 'Error anulando costo'
+          showNotification(message, 'error')
+        } finally {
+          setReasonModal((r) => ({ ...r, isOpen: false }))
+        }
+      },
+      cancelCallback: () => setReasonModal((r) => ({ ...r, isOpen: false })),
+    })
   }
 
   const handleSubmitModal = async (formData) => {
@@ -1232,7 +1320,11 @@ export default function WorkerPanel() {
       const searchTerm = searchEtapaTerm.trim().toLowerCase()
       const matchesSearch = !searchTerm || nombre.includes(searchTerm)
       const matchesEstado = filterEtapaEstado === 'todos' || estado === normalizedFilterEtapaEstado
-      return matchesSearch && matchesEstado
+      const registroEstado = getRegistroEstado(etapa)
+      const matchesRegistroEstado = etapasEstado === 'TODOS'
+        ? true
+        : registroEstado === etapasEstado
+      return matchesSearch && matchesEstado && matchesRegistroEstado
     })
 
     if (filtered.length === 0) {
@@ -1265,18 +1357,24 @@ export default function WorkerPanel() {
               <button type="button" className="btn-icon btn-edit" title="Editar" onClick={() => handleOpenEditEtapa(etapa)}>
                 ✏️
               </button>
-              <button type="button" className="btn-icon btn-delete" title="Eliminar" onClick={() => handleDeleteEtapa(etapa)}>
-                🗑️
+              <button type="button" className="btn-icon btn-delete" title="Anular" onClick={() => handleDeleteEtapa(etapa)}>
+                {'\uD83D\uDEAB'}
               </button>
             </div>
           </td>
         </tr>
       )
     })
-  }, [etapasCultivo, searchEtapaTerm, filterEtapaEstado])
+  }, [etapasCultivo, searchEtapaTerm, filterEtapaEstado, etapasEstado])
 
   const filteredCosechas = useMemo(() => {
-    const cosechas = detalleCosechas || []
+    let cosechas = detalleCosechas || []
+    if (detalleCosechasEstado && detalleCosechasEstado !== 'TODOS') {
+      cosechas = cosechas.filter((cosecha) => {
+        const reg = getRegistroEstado(cosecha)
+        return String(reg || '').toUpperCase() === String(detalleCosechasEstado).toUpperCase()
+      })
+    }
     const desde = cosechaFilterFechaDesde ? new Date(cosechaFilterFechaDesde) : null
     const hasta = cosechaFilterFechaHasta ? new Date(cosechaFilterFechaHasta) : null
     return cosechas.filter((cosecha) => {
@@ -1287,12 +1385,18 @@ export default function WorkerPanel() {
       if (hasta && fecha > hasta) return false
       return true
     })
-  }, [detalleCosechas, cosechaFilterFechaDesde, cosechaFilterFechaHasta])
+  }, [detalleCosechas, detalleCosechasEstado, cosechaFilterFechaDesde, cosechaFilterFechaHasta])
 
   const costosSource = useMemo(() => detalleCostos || [], [detalleCostos])
 
   const filteredCostos = useMemo(() => {
     let list = costosSource
+    if (detalleCostosEstado && detalleCostosEstado !== 'TODOS') {
+      list = list.filter((costo) => {
+        const reg = getRegistroEstado(costo)
+        return String(reg || '').toUpperCase() === String(detalleCostosEstado).toUpperCase()
+      })
+    }
     if (filterCat !== 'todos') {
       list = list.filter((costo) => (costo.categoria || '').toLowerCase().replace(/ /g, '-') === filterCat)
     }
@@ -1321,7 +1425,7 @@ export default function WorkerPanel() {
       })
     }
     return list
-  }, [costosSource, filterCat, filterEtapa, filterEstadoPago, filterDesde, filterHasta])
+  }, [costosSource, detalleCostosEstado, filterCat, filterEtapa, filterEstadoPago, filterDesde, filterHasta])
 
   const costosTotales = useMemo(() => {
     let total = 0
@@ -1699,11 +1803,17 @@ export default function WorkerPanel() {
                       </select>
                     </div>
                   </div>
+                  <StateFilterMenu
+                    states={[ 'ACTIVO', 'ANULADO' ]}
+                    activeState={etapasEstado}
+                    onStateChange={(s) => setEtapasEstado(s)}
+                    labels={{ ACTIVO: 'ACTIVOS', ANULADO: 'ANULADOS' }}
+                  />
                   <div className="table-container">
                     <table className="data-table">
                       <thead>
                         <tr className="table-title-row">
-                          <th colSpan={6}>Etapas Registradas</th>
+                          <th colSpan={etapasEstado === 'ACTIVO' ? 6 : 5}>Etapas Registradas</th>
                         </tr>
                         <tr>
                           <th>Nombre</th>
@@ -1711,13 +1821,13 @@ export default function WorkerPanel() {
                           <th>Fecha Inicio</th>
                           <th>Fecha Final</th>
                           <th>Estado</th>
-                          <th>Acciones</th>
+                          {etapasEstado === 'ACTIVO' && <th>Acciones</th>}
                         </tr>
                       </thead>
                       <tbody id="etapas-tbody">
                         {isLoadingEtapas ? (
                           <tr className="data-item">
-                            <td colSpan={6} style={{ textAlign: 'center', color: '#666', padding: 20 }}>
+                            <td colSpan={etapasEstado === 'ACTIVO' ? 6 : 5} style={{ textAlign: 'center', color: '#666', padding: 20 }}>
                               Cargando etapas...
                             </td>
                           </tr>
@@ -1756,11 +1866,17 @@ export default function WorkerPanel() {
                       />
                     </div>
                   </div>
+                  <StateFilterMenu
+                    states={[ 'ACTIVO', 'ANULADO' ]}
+                    activeState={detalleCosechasEstado}
+                    onStateChange={(s) => setDetalleCosechasEstado(s)}
+                    labels={{ ACTIVO: 'ACTIVOS', ANULADO: 'ANULADOS' }}
+                  />
                   <div className="table-container">
                     <table className="data-table">
                       <thead>
                         <tr className="table-title-row">
-                          <th colSpan={6}>Cosechas Realizadas</th>
+                          <th colSpan={detalleCosechasEstado === 'ACTIVO' ? 6 : 5}>Cosechas Realizadas</th>
                         </tr>
                         <tr>
                           <th>Fecha</th>
@@ -1768,19 +1884,19 @@ export default function WorkerPanel() {
                           <th>Unidad Medida</th>
                           <th>Precio</th>
                           <th>Tipo Precio</th>
-                          <th>Acciones</th>
+                          {detalleCosechasEstado === 'ACTIVO' && <th>Acciones</th>}
                         </tr>
                       </thead>
                       <tbody id="cosechas-tbody">
                         {isLoadingCosechas ? (
                           <tr className="data-item">
-                            <td colSpan={6} style={{ textAlign: 'center', color: '#666', padding: 20 }}>
+                            <td colSpan={detalleCosechasEstado === 'ACTIVO' ? 6 : 5} style={{ textAlign: 'center', color: '#666', padding: 20 }}>
                               Cargando cosechas...
                             </td>
                           </tr>
                         ) : filteredCosechas.length === 0 ? (
                           <tr className="data-item">
-                            <td colSpan={6} style={{ textAlign: 'center', color: '#666' }}>
+                            <td colSpan={detalleCosechasEstado === 'ACTIVO' ? 6 : 5} style={{ textAlign: 'center', color: '#666' }}>
                               No se encontraron cosechas registradas.
                             </td>
                           </tr>
@@ -1792,16 +1908,18 @@ export default function WorkerPanel() {
                               <td data-field="unidad">{cosecha.unidad || cosecha.unidad_medida || cosecha.unidad?.nombre || cosecha.unidadMedida || '--'}</td>
                               <td data-field="precio">{formatMoneyDisplay(cosecha.precio || cosecha.precio_unitario)}</td>
                               <td data-field="tipo-precio">{cosecha.tipoPrecio || cosecha.tipo_precio || cosecha.tipoprecio || cosecha.tipoPrecio?.nombre || '--'}</td>
-                              <td data-field="acciones">
-                                <div className="action-buttons">
-                                  <button type="button" className="btn-icon btn-edit" title="Editar" onClick={() => handleOpenEditCosecha(cosecha)}>
-                                    ✏️
-                                  </button>
-                                  <button type="button" className="btn-icon btn-delete" title="Eliminar" onClick={() => handleDeleteCosecha(cosecha)}>
-                                    🗑️
-                                  </button>
-                                </div>
-                              </td>
+                              {detalleCosechasEstado === 'ACTIVO' && (
+                                <td data-field="acciones">
+                                  <div className="action-buttons">
+                                    <button type="button" className="btn-icon btn-edit" title="Editar" onClick={() => handleOpenEditCosecha(cosecha)}>
+                                      ✏️
+                                    </button>
+                                    <button type="button" className="btn-icon btn-delete" title="Anular" onClick={() => handleDeleteCosecha(cosecha)}>
+                                      {'\uD83D\uDEAB'}
+                                    </button>
+                                  </div>
+                                </td>
+                              )}
                             </tr>
                           ))
                         )}
@@ -1871,11 +1989,17 @@ export default function WorkerPanel() {
                     </span>
                   </div>
 
+                  <StateFilterMenu
+                    states={[ 'ACTIVO', 'ANULADO' ]}
+                    activeState={detalleCostosEstado}
+                    onStateChange={(s) => setDetalleCostosEstado(s)}
+                    labels={{ ACTIVO: 'ACTIVOS', ANULADO: 'ANULADOS' }}
+                  />
                   <div className="table-container">
                     <table className="data-table costos-table">
                       <thead>
                         <tr className="table-title-row">
-                          <th colSpan={9} style={{ backgroundColor: 'var(--bg-header)' }}>
+                          <th colSpan={detalleCostosEstado === 'ACTIVO' ? 9 : 8} style={{ backgroundColor: 'var(--bg-header)' }}>
                             Costos Registrados del Cultivo
                           </th>
                         </tr>
@@ -1888,19 +2012,19 @@ export default function WorkerPanel() {
                           <th>Info Adicional</th>
                           <th>Valor</th>
                           <th>Estado</th>
-                          <th>Acciones</th>
+                          {detalleCostosEstado === 'ACTIVO' && <th>Acciones</th>}
                         </tr>
                       </thead>
                       <tbody id="costos-cultivo-tbody">
                         {isLoadingCostos ? (
                           <tr className="data-item">
-                            <td colSpan={9} style={{ textAlign: 'center', color: '#666', padding: 20 }}>
+                            <td colSpan={detalleCostosEstado === 'ACTIVO' ? 9 : 8} style={{ textAlign: 'center', color: '#666', padding: 20 }}>
                               Cargando costos...
                             </td>
                           </tr>
                         ) : filteredCostos.length === 0 ? (
                           <tr className="data-item">
-                            <td colSpan={9} style={{ textAlign: 'center', color: '#666', padding: 20 }}>
+                            <td colSpan={detalleCostosEstado === 'ACTIVO' ? 9 : 8} style={{ textAlign: 'center', color: '#666', padding: 20 }}>
                               No se encontraron costos con los filtros aplicados.
                             </td>
                           </tr>
@@ -1942,16 +2066,18 @@ export default function WorkerPanel() {
                                     {(costo.estado_pago || costo.estado || 'Pendiente').toString().replace(/-/g, ' ')}
                                   </span>
                                 </td>
-                                <td data-field="acciones">
-                                  <div className="action-buttons">
-                                    <button type="button" className="btn-icon btn-edit" title="Editar" onClick={() => handleOpenEditCosto(costo)}>
-                                      ✏️
-                                    </button>
-                                    <button type="button" className="btn-icon btn-delete" title="Eliminar" onClick={() => handleDeleteCosto(costo)}>
-                                      🗑️
-                                    </button>
-                                  </div>
-                                </td>
+                                {detalleCostosEstado === 'ACTIVO' && (
+                                  <td data-field="acciones">
+                                    <div className="action-buttons">
+                                      <button type="button" className="btn-icon btn-edit" title="Editar" onClick={() => handleOpenEditCosto(costo)}>
+                                        ✏️
+                                      </button>
+                                      <button type="button" className="btn-icon btn-delete" title="Anular" onClick={() => handleDeleteCosto(costo)}>
+                                        {'\uD83D\uDEAB'}
+                                      </button>
+                                    </div>
+                                  </td>
+                                )}
                               </tr>
                             )
                           })
@@ -2011,6 +2137,13 @@ export default function WorkerPanel() {
           fieldOptions={modalFieldOptions}
           initialData={modalInitialData}
           isEditing={isEditingModal}
+        />
+        <ReasonModal
+          isOpen={reasonModal.isOpen}
+          title={reasonModal.title}
+          question={reasonModal.question}
+          onConfirm={reasonModal.callback || (() => {})}
+          onCancel={reasonModal.cancelCallback || (() => setReasonModal((r) => ({ ...r, isOpen: false })))}
         />
       </main>
     </div>

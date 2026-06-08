@@ -18,8 +18,10 @@ function parseCurrencyParameter(value) {
   return Number.isFinite(parsed) ? parsed : NaN
 }
 
-export async function fetchCultivosPorFinca(fincaId) {
-  const response = await httpClient.get(`/api/cultivos/finca/${fincaId}`);
+export async function fetchCultivosPorFinca(fincaId, estado = 'ACTIVO') {
+  const response = await httpClient.get(`/api/cultivos/finca/${fincaId}`, {
+    params: { estado },
+  });
   return response.data?.data ?? response.data;
 }
 
@@ -163,6 +165,38 @@ export async function fetchCostosPorFinca(fincaId) {
 
 export async function deleteCosto(idcosto) {
   const response = await httpClient.delete(`/api/costos/${idcosto}`)
+  return response.data
+}
+
+export async function changeCostoState(idcosto, nuevoEstado, motivo) {
+  const response = await httpClient.patch(`/api/costos/${idcosto}/state`, {
+    nuevoEstado,
+    motivo,
+  })
+  return response.data
+}
+
+export async function changeCultivoState(idcultivo, nuevoEstado, motivo) {
+  const response = await httpClient.patch(`/api/cultivos/${idcultivo}/state`, {
+    nuevoEstado,
+    motivo,
+  })
+  return response.data
+}
+
+export async function changeEtapaState(idEtapaCultivo, nuevoEstado, motivo) {
+  const response = await httpClient.patch(`/api/cultivos/etapas/${idEtapaCultivo}/state`, {
+    nuevoEstado,
+    motivo,
+  })
+  return response.data
+}
+
+export async function changeCosechaState(idCosecha, nuevoEstado, motivo) {
+  const response = await httpClient.patch(`/api/cosechas/${idCosecha}/state`, {
+    nuevoEstado,
+    motivo,
+  })
   return response.data
 }
 

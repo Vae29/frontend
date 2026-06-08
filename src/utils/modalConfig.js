@@ -73,7 +73,7 @@ export const getModalConfig = (type) => {
           label: 'Apellidos',
           type: 'text',
           placeholder: 'Ej: López',
-          required: false,
+          required: true,
         },
         {
           name: 'correo',
@@ -366,6 +366,25 @@ export const validateForm = (type, formData) => {
   })
 
   return errors
+}
+
+export const normalizeModalTextFields = (data) => {
+  if (!data || typeof data !== 'object') return {}
+
+  return Object.entries(data).reduce((result, [key, value]) => {
+    if (typeof value === 'string') {
+      if (key === 'contraseña' || key.toLowerCase().includes('password')) {
+        result[key] = value
+      } else {
+        result[key] = value.trim().toLowerCase()
+      }
+    } else if (Array.isArray(value)) {
+      result[key] = value.map((item) => (typeof item === 'string' ? item.trim().toLowerCase() : item))
+    } else {
+      result[key] = value
+    }
+    return result
+  }, {})
 }
 
 /**

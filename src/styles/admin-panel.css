@@ -730,6 +730,8 @@ html.dark-mode .config-card h3 {
     overflow-x: auto;
     overflow-y: auto;
     max-height: 380px;
+    height: 380px;
+    position: relative;
 }
 
 #etapas-section .table-container {
@@ -739,6 +741,13 @@ html.dark-mode .config-card h3 {
 #etapas-section .data-table thead,
 #etapas-section .data-table th {
     background-color: var(--bg-header);
+}
+
+#detalle-cultivo-section .table-container {
+    height: 360px;
+    max-height: 360px;
+    min-height: 360px;
+    overflow-y: auto;
 }
 
 /* Scrollbar del contenedor de tabla */
@@ -898,6 +907,27 @@ html.dark-mode .config-card h3 {
     top: 88px !important;
     z-index: 19 !important;
     background-color: var(--bg-header) !important;
+}
+
+#detalle-cultivo-section .table-container {
+    max-height: 420px;
+}
+
+#detalle-cultivo-section .table-container .data-table thead th {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 12 !important;
+    background-color: var(--bg-header) !important;
+}
+
+#detalle-cultivo-section .table-container .data-table thead tr.table-title-row th {
+    top: 0 !important;
+    z-index: 14 !important;
+}
+
+#detalle-cultivo-section .table-container .data-table thead tr.table-title-row + tr th {
+    top: 88px !important;
+    z-index: 13 !important;
 }
 
 .data-table thead tr:last-child th:first-child {
@@ -1216,6 +1246,44 @@ html.dark-mode .config-card h3 {
     background-color: #7f8c8d;
 }
 
+.detalle-cultivo-readonly-note {
+    margin-top: 15px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px 18px;
+    border-radius: 14px;
+    background-color: rgba(236, 240, 241, 0.95);
+    border: 1px solid rgba(189, 195, 199, 0.6);
+    color: #34495e;
+    box-shadow: 0 2px 10px rgba(52, 73, 94, 0.08);
+}
+
+.detalle-cultivo-readonly-note .readonly-note-icon {
+    flex-shrink: 0;
+    font-size: 1.35rem;
+    line-height: 1;
+}
+
+.detalle-cultivo-readonly-note .readonly-note-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.95rem;
+    color: #34495e;
+}
+
+.detalle-cultivo-readonly-note .readonly-note-content strong {
+    display: block;
+    color: #2c3e50;
+    font-size: 1rem;
+}
+
+.detalle-cultivo-readonly-note .readonly-note-content p {
+    margin: 0;
+    line-height: 1.55;
+}
+
  .detalle-cultivo-badge-categoria {
     color: #ffffff;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
@@ -1456,6 +1524,189 @@ html.dark-mode .config-card h3 {
 
 .filter-date:hover {
     border-color: #5a7d52;
+}
+
+/* ==========================================
+   STICKY POSITIONING PARA TABLAS
+   ========================================== */
+
+/* Secciones de información con encabezado sticky */
+.info-section {
+    background-color: var(--bg-white);
+    border-radius: 12px;
+    padding: 30px;
+    margin-bottom: 30px;
+    box-shadow: 0 2px 8px var(--black-transparent-08);
+    position: relative;
+}
+
+.section-info-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    border-bottom: 2px solid var(--border-color);
+    padding-bottom: 15px;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background-color: var(--bg-white);
+}
+
+/* Table containers con scrolling */
+.table-container {
+    position: relative;
+    background-color: var(--bg-white);
+}
+
+/* State filter menu container */
+.state-filter-menu {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    justify-content: flex-start;
+    margin-bottom: 22px;
+    padding: 14px 18px;
+    border: 1px solid rgba(34, 60, 80, 0.08);
+    border-radius: 18px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(247,250,247,0.96));
+    box-shadow: 0 12px 30px rgba(8, 30, 10, 0.06);
+    position: sticky;
+    top: 0;
+    z-index: 12;
+}
+
+.state-filter-button {
+    padding: 10px 20px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: #fbfcfb;
+    color: #51605a;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 96px;
+    white-space: nowrap;
+}
+
+.state-filter-button.active {
+    background: #e6f4e4;
+    border-color: #72b46a;
+    color: #2b5f31;
+    box-shadow: inset 0 0 0 1px rgba(74, 124, 89, 0.2);
+}
+
+.state-filter-button:hover {
+    background: #f2f7f1;
+    color: #36503d;
+}
+
+/* Más presentación para los encabezados de sección */
+.section-info-header {
+    background: #ffffff;
+    border: 1px solid rgba(34, 60, 80, 0.08);
+    border-radius: 18px;
+    padding: 22px 24px;
+    box-shadow: 0 10px 30px rgba(8, 30, 10, 0.04);
+}
+
+.table-container {
+    background-color: #ffffff;
+    border-radius: 18px;
+    border: 1px solid rgba(34, 60, 80, 0.08);
+    box-shadow: 0 10px 30px rgba(8, 30, 10, 0.04);
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: 380px;
+}
+
+/* Encabezados de tabla sticky con capas */
+.table-container .data-table thead th {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 11 !important;
+    background-color: var(--bg-header) !important;
+    background-clip: padding-box !important;
+}
+
+/* Fila de título de la tabla sticky */
+.table-container .data-table thead tr.table-title-row th {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 13 !important;
+    background-color: var(--bg-header) !important;
+}
+
+/* Ajuste cuando el menú de estado está presente dentro del contenedor */
+.table-container .state-filter-menu + .data-table thead tr.table-title-row th {
+    top: 52px !important;
+}
+
+.table-container .state-filter-menu + .data-table thead tr.table-title-row + tr th {
+    top: 104px !important;
+}
+
+/* Segunda fila de encabezados sticky */
+.table-container .data-table thead tr.table-title-row + tr th {
+    position: sticky !important;
+    top: 88px !important;
+    z-index: 12 !important;
+    background-color: var(--bg-header) !important;
+}
+
+/* Activar sticky dentro de detalle de cultivo */
+#detalle-cultivo-section .table-container {
+    max-height: 360px;
+    min-height: 360px;
+    height: 360px;
+    overflow-y: auto;
+}
+
+#detalle-cultivo-section .section-info-header,
+#detalle-cultivo-section .state-filter-menu {
+    position: static !important;
+    top: auto !important;
+    z-index: auto !important;
+}
+
+#detalle-cultivo-section .table-container .data-table thead th {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 11 !important;
+    background-color: var(--bg-header) !important;
+    background-clip: padding-box !important;
+}
+
+#detalle-cultivo-section .table-container .data-table thead tr.table-title-row th {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 13 !important;
+}
+
+#detalle-cultivo-section .table-container .data-table thead tr.table-title-row + tr th {
+    position: sticky !important;
+    top: 88px !important;
+    z-index: 12 !important;
+    background-color: var(--bg-header) !important;
+}
+
+/* Para tablas de costos con mayor z-index */
+.table-container .costos-table thead tr.table-title-row th,
+.table-container .costos-generales-table thead tr.table-title-row th {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 20 !important;
+    background-color: var(--bg-header) !important;
+}
+
+.table-container .costos-table thead tr.table-title-row + tr th,
+.table-container .costos-generales-table thead tr.table-title-row + tr th {
+    position: sticky !important;
+    top: 88px !important;
+    z-index: 19 !important;
+    background-color: var(--bg-header) !important;
 }
 
 .filter-date:focus {
