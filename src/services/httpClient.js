@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { getAccessToken, setAccessToken, clearTokens } from './authSession.js';
 
-const API_URL = 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL;
 
 // Crear instancia de axios
 const httpClient = axios.create({
