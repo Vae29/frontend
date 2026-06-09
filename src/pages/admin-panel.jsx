@@ -685,7 +685,10 @@ export default function AdminPanel() {
       if (!Number.isInteger(fincaNumericId) || fincaNumericId <= 0) return
       try {
         setIsLoadingCultivos(true)
+        console.log('[admin-panel] fetchCultivosData -> requesting cultivos for fincaId=', fincaNumericId, 'estado=', cultivosEstado)
+        console.log('[admin-panel] fetchCultivosData -> finca record in fincasData:', (fincasData || []).find((f) => Number(f.id) === Number(fincaNumericId)))
         const data = await fetchCultivosPorFinca(fincaNumericId, cultivosEstado)
+        console.log('[admin-panel] fetchCultivosData -> response', data)
         setCultivos(Array.isArray(data) ? data : [])
       } catch (error) {
         console.error('Error al cargar cultivos:', error)
@@ -2168,7 +2171,9 @@ export default function AdminPanel() {
             setEditingCultivo(null)
           } else {
             // Crear nuevo cultivo
+            console.log('[admin-panel] Creating cultivo', { nombre, idtipocultivo, idfinca })
             const resp = await createCultivo({ nombre, idtipocultivo, idfinca })
+            console.log('[admin-panel] createCultivo response', resp)
             if (!resp || resp.success === false) {
               const msg = resp?.message || 'Error creando el cultivo'
               showNotification(msg, 'error')
@@ -2180,6 +2185,7 @@ export default function AdminPanel() {
 
           // Recargar cultivos de la finca actual y actualizar el conteo de cultivos activos.
           await fetchCultivosData(String(idfinca))
+          console.log('[admin-panel] after fetchCultivosData, cultivos state:', cultivos)
           setFincasRefresh((prev) => prev + 1)
           const cultivosResponse = await fetchCultivosEnProceso()
           const cultivosArray = cultivosResponse?.success

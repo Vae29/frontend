@@ -31,11 +31,13 @@ export async function fetchTiposCultivo() {
 }
 
 export async function createCultivo({ nombre, idtipocultivo, idfinca }) {
+  console.log('[cultivoService] createCultivo -> request payload', { nombre, idtipocultivo, idfinca })
   const response = await httpClient.post('/api/cultivos', {
     nombre,
     idtipocultivo,
     idfinca,
   });
+  console.log('[cultivoService] createCultivo -> response', response && response.data ? response.data : response)
   return response.data;
 }
 
