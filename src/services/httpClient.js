@@ -3,6 +3,12 @@ import { getAccessToken, setAccessToken, clearTokens } from './authSession.js';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
+if (!API_URL) {
+  console.warn(
+    'VITE_API_URL no está definido. Las peticiones se harán al origen actual, lo que puede fallar en producción.'
+  );
+}
+
 // Crear instancia de axios
 const httpClient = axios.create({
   baseURL: API_URL,
