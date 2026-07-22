@@ -362,6 +362,10 @@ html, body {
     font-size: 0.95em;
 }
 
+html.dark-mode .logout-btn {
+    color: #ffffff;
+}
+
 .logout-btn:hover {
     background-color: var(--accent-color);
     color: var(--text-white);

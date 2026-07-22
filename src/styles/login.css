@@ -73,6 +73,12 @@ body {
     box-shadow: none;
 }
 
+/* El login conserva su apariencia original aunque el modo oscuro quede activo. */
+html.dark-mode .login-page .welcome-container {
+    background: transparent;
+    box-shadow: none;
+}
+
 .logo-container {
     position: relative;
     width: 100%;
