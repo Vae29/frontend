@@ -78,6 +78,16 @@ export async function fetchReportQuery(reportType, filters = {}) {
   }
 }
 
+export async function registerReportExport(reportType, formato, filtros = {}) {
+  try {
+    const response = await httpClient.post('/api/reportes/audit-export', { reportType, formato, filtros });
+    return await getJson(response.data);
+  } catch (error) {
+    console.error('registerReportExport error', error);
+    return { success: false, error: error.response?.data?.message || 'Error de red' };
+  }
+}
+
 export default {
   fetchReportFilters,
   fetchReportPorCultivo,
@@ -86,4 +96,5 @@ export default {
   fetchReportRentabilidad,
   fetchReportTrabajador,
   fetchReportQuery,
+  registerReportExport,
 };

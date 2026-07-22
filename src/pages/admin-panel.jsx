@@ -3084,6 +3084,7 @@ export default function AdminPanel() {
   // Exporta el reporte visible a PDF usando html2pdf.
   const exportPdf = async () => {
     if (!reportRef.current) return
+    await reportService.registerReportExport(reportType, 'PDF', buildFiltersObject())
     const html2pdf = (await import('html2pdf.js')).default
     const opt = {
       margin: 10,
@@ -3098,6 +3099,7 @@ export default function AdminPanel() {
   // Exporta el reporte visible a Excel usando XLSX.
   const exportExcel = async () => {
     if (!reportRef.current) return
+    await reportService.registerReportExport(reportType, 'EXCEL', buildFiltersObject())
     const XLSX = await import('xlsx')
     const table = reportRef.current.querySelector('.data-table')
     if (!table) return
