@@ -384,7 +384,8 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
                     fontFamily: "var(--font-cuerpo, 'Poppins')",
                     boxSizing: 'border-box',
                     transition: 'all 0.3s ease',
-                    backgroundColor: 'white',
+                    backgroundColor: 'var(--color-verde-oscuro, #47663c)',
+                    color: 'white',
                     cursor: 'pointer',
                     minHeight: field.multiple ? '120px' : undefined,
                   }}
@@ -403,7 +404,7 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
                   {(fieldOptions[field.name] || field.options || []).map((option) => {
                     const optionValue = String(option.value ?? option)
                     return (
-                      <option key={optionValue} value={optionValue}>
+                      <option key={optionValue} value={optionValue} style={{ backgroundColor: 'var(--color-verde-oscuro, #47663c)', color: 'white' }}>
                         {option.label || optionValue}
                       </option>
                     )

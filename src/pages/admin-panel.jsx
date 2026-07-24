@@ -1192,7 +1192,8 @@ export default function AdminPanel() {
     fechaFin: filtroFechaFin || null,
   })
 
-  const fetchReport = async (tipo) => {
+  const fetchReport = useCallback(async (tipo) => {
+    if (!tipo) return
     setIsLoadingReport(true)
     setReportMessage(null)
     try {
@@ -1233,7 +1234,7 @@ export default function AdminPanel() {
     } finally {
       setIsLoadingReport(false)
     }
-  }
+  }, [buildFiltersObject, fincaId, filtroCategoriaCosto, filtroCultivo, filtroEstadoCultivo, filtroFechaFin, filtroFechaInicio, filtroUsuario])
 
   const openReport = async (tipo) => {
     setReportType(tipo)
@@ -2059,6 +2060,9 @@ export default function AdminPanel() {
           // Recargar cultivos filtrados por estado actual y refrescar el dashboard.
           await fetchCultivosData(fincaId)
           setFincasRefresh((prev) => prev + 1)
+          if (reportVisible && reportType) {
+            await fetchReport(reportType)
+          }
           showNotification('Cultivo archivado correctamente', 'success')
         } catch (error) {
           console.error(error)
@@ -2185,7 +2189,6 @@ export default function AdminPanel() {
 
           // Recargar cultivos de la finca actual y actualizar el conteo de cultivos activos.
           await fetchCultivosData(String(idfinca))
-          console.log('[admin-panel] after fetchCultivosData, cultivos state:', cultivos)
           setFincasRefresh((prev) => prev + 1)
           const cultivosResponse = await fetchCultivosEnProceso()
           const cultivosArray = cultivosResponse?.success
@@ -2195,6 +2198,9 @@ export default function AdminPanel() {
             : cultivosResponse?.data || []
 
           setCultivosData(cultivosArray)
+          if (reportVisible && reportType) {
+            await fetchReport(reportType)
+          }
         } catch (error) {
           console.error('Error guardando/actualizando cultivo:', error)
           const message = error?.response?.data?.message || error?.response?.data?.error || 'Error guardando el cultivo'
