@@ -7,6 +7,22 @@ async function getJson(response) {
   return response;
 }
 
+function normalizeReportFilters(filters = {}) {
+  const normalized = { ...filters };
+  for (const key of ['fincaId', 'cultivoId', 'categoriaId', 'subcategoriaId', 'usuarioId', 'estadoId']) {
+    const value = filters[key];
+    if (value === '' || value == null) {
+      normalized[key] = null;
+      continue;
+    }
+    const number = Number(value);
+    normalized[key] = Number.isInteger(number) && number > 0 ? number : null;
+  }
+  normalized.fechaInicio = filters.fechaInicio || null;
+  normalized.fechaFin = filters.fechaFin || null;
+  return normalized;
+}
+
 export async function fetchReportFilters(fincaId) {
   try {
     const query = fincaId ? `?fincaId=${encodeURIComponent(fincaId)}` : '';
@@ -20,7 +36,7 @@ export async function fetchReportFilters(fincaId) {
 
 export async function fetchReportPorCultivo(filters = {}) {
   try {
-    const response = await httpClient.post('/api/reportes/por-cultivo', filters);
+    const response = await httpClient.post('/api/reportes/por-cultivo', normalizeReportFilters(filters));
     return await getJson(response.data);
   } catch (error) {
     console.error('fetchReportPorCultivo error', error);
@@ -30,7 +46,7 @@ export async function fetchReportPorCultivo(filters = {}) {
 
 export async function fetchReportCostos(filters = {}) {
   try {
-    const response = await httpClient.post('/api/reportes/costos', filters);
+    const response = await httpClient.post('/api/reportes/costos', normalizeReportFilters(filters));
     return await getJson(response.data);
   } catch (error) {
     console.error('fetchReportCostos error', error);
@@ -40,7 +56,7 @@ export async function fetchReportCostos(filters = {}) {
 
 export async function fetchReportProduccion(filters = {}) {
   try {
-    const response = await httpClient.post('/api/reportes/produccion', filters);
+    const response = await httpClient.post('/api/reportes/produccion', normalizeReportFilters(filters));
     return await getJson(response.data);
   } catch (error) {
     console.error('fetchReportProduccion error', error);
@@ -50,7 +66,7 @@ export async function fetchReportProduccion(filters = {}) {
 
 export async function fetchReportRentabilidad(filters = {}) {
   try {
-    const response = await httpClient.post('/api/reportes/rentabilidad', filters);
+    const response = await httpClient.post('/api/reportes/rentabilidad', normalizeReportFilters(filters));
     return await getJson(response.data);
   } catch (error) {
     console.error('fetchReportRentabilidad error', error);
@@ -60,7 +76,7 @@ export async function fetchReportRentabilidad(filters = {}) {
 
 export async function fetchReportTrabajador(filters = {}) {
   try {
-    const response = await httpClient.post('/api/reportes/trabajador', filters);
+    const response = await httpClient.post('/api/reportes/trabajador', normalizeReportFilters(filters));
     return await getJson(response.data);
   } catch (error) {
     console.error('fetchReportTrabajador error', error);
@@ -70,7 +86,10 @@ export async function fetchReportTrabajador(filters = {}) {
 
 export async function fetchReportQuery(reportType, filters = {}) {
   try {
-    const response = await httpClient.post('/api/reportes/query', { reportType, filters });
+    const response = await httpClient.post('/api/reportes/query', {
+      reportType,
+      filters: normalizeReportFilters(filters),
+    });
     return await getJson(response.data);
   } catch (error) {
     console.error('fetchReportQuery error', error);

@@ -351,10 +351,11 @@ export default function AdminPanel() {
   const [filtroFechaFin, setFiltroFechaFin] = useState('')
   const [filtroCultivo, setFiltroCultivo] = useState('')
   const [filtroCategoriaCosto, setFiltroCategoriaCosto] = useState('')
+  const [filtroSubcategoriaCosto, setFiltroSubcategoriaCosto] = useState('')
   const [filtroUsuario, setFiltroUsuario] = useState('')
   const [filtroEstadoCultivo, setFiltroEstadoCultivo] = useState('')
   const [searchCultivoTerm, setSearchCultivoTerm] = useState('')
-  const [filterOptions, setFilterOptions] = useState({ cultivos: [], usuarios: [], estados: [], categorias: [] })
+  const [filterOptions, setFilterOptions] = useState({ cultivos: [], usuarios: [], estados: [], categorias: [], subcategorias: [] })
   const [estadoOptions, setEstadoOptions] = useState([])
   const [reportData, setReportData] = useState(null)
   const [isLoadingReport, setIsLoadingReport] = useState(false)
@@ -479,7 +480,14 @@ export default function AdminPanel() {
       try {
         const res = await reportService.fetchReportFilters(fincaId)
         if (res && res.success) {
-          setFilterOptions(res.data)
+          setFilterOptions({
+            cultivos: [],
+            usuarios: [],
+            estados: [],
+            categorias: [],
+            subcategorias: [],
+            ...res.data,
+          })
         } else {
           console.warn('No se pudieron cargar filtros de reportes', res)
         }
@@ -1182,10 +1190,11 @@ export default function AdminPanel() {
     fetchFincasList('')
   }
 
-  const buildFiltersObject = () => ({
+  const buildFiltersObject = (tipo) => ({
     fincaId: fincaId ? Number(fincaId) : null,
     cultivoId: filtroCultivo ? Number(filtroCultivo) : null,
-    categoriaId: filtroCategoriaCosto ? Number(filtroCategoriaCosto) : null,
+    categoriaId: tipo !== 'produccion' && filtroCategoriaCosto ? Number(filtroCategoriaCosto) : null,
+    subcategoriaId: tipo !== 'produccion' && filtroSubcategoriaCosto ? Number(filtroSubcategoriaCosto) : null,
     usuarioId: filtroUsuario ? Number(filtroUsuario) : null,
     estadoId: filtroEstadoCultivo ? Number(filtroEstadoCultivo) : null,
     fechaInicio: filtroFechaInicio || null,
@@ -1197,7 +1206,7 @@ export default function AdminPanel() {
     setIsLoadingReport(true)
     setReportMessage(null)
     try {
-      const filters = buildFiltersObject()
+      const filters = buildFiltersObject(tipo)
       let res = null
       switch (tipo) {
         case 'por-cultivo':
@@ -1234,7 +1243,7 @@ export default function AdminPanel() {
     } finally {
       setIsLoadingReport(false)
     }
-  }, [buildFiltersObject, fincaId, filtroCategoriaCosto, filtroCultivo, filtroEstadoCultivo, filtroFechaFin, filtroFechaInicio, filtroUsuario])
+  }, [buildFiltersObject, fincaId, filtroCategoriaCosto, filtroCultivo, filtroEstadoCultivo, filtroFechaFin, filtroFechaInicio, filtroSubcategoriaCosto, filtroUsuario])
 
   const openReport = async (tipo) => {
     setReportType(tipo)
@@ -4329,13 +4338,35 @@ export default function AdminPanel() {
                   </div>
                   <div className="filtro-group">
                     <label>Categoría de Costo</label>
-                    <select id="filtroCategoriaCosto" className="filtro-select" value={filtroCategoriaCosto} onChange={(e) => setFiltroCategoriaCosto(e.target.value)}>
+                    <select id="filtroCategoriaCosto" className="filtro-select" value={filtroCategoriaCosto} disabled={reportType === 'produccion'} onChange={(e) => {
+                      setFiltroCategoriaCosto(e.target.value)
+                      setFiltroSubcategoriaCosto('')
+                    }}>
                       <option value="">Todas las categorías</option>
                       {filterOptions.categorias.map((categoria) => (
                         <option key={categoria.id} value={categoria.id}>
                           {categoria.nombre}
                         </option>
                       ))}
+                    </select>
+                  </div>
+                  <div className="filtro-group">
+                    <label>Subcategoría de Costo</label>
+                    <select
+                      id="filtroSubcategoriaCosto"
+                      className="filtro-select"
+                      value={filtroSubcategoriaCosto}
+                      disabled={!filtroCategoriaCosto || reportType === 'produccion'}
+                      onChange={(e) => setFiltroSubcategoriaCosto(e.target.value)}
+                    >
+                      <option value="">Todas las subcategorías</option>
+                      {filterOptions.subcategorias
+                        .filter((subcategoria) => String(subcategoria.categoriaId) === String(filtroCategoriaCosto))
+                        .map((subcategoria) => (
+                          <option key={subcategoria.id} value={subcategoria.id}>
+                            {subcategoria.nombre}
+                          </option>
+                        ))}
                     </select>
                   </div>
                   <div className="filtro-group">
@@ -4385,6 +4416,7 @@ export default function AdminPanel() {
                         setFiltroFechaFin('')
                         setFiltroCultivo('')
                         setFiltroCategoriaCosto('')
+                        setFiltroSubcategoriaCosto('')
                         setFiltroUsuario('')
                         setFiltroEstadoCultivo('')
                         setReportData(null)
