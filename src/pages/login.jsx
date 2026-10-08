@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as Agro from '../services/agroData'
-import { loginUser, requestPasswordReset, verifyResetCode } from '../services/authApi'
+import { loginUser, requestPasswordReset, verifyResetCode, recoverPassword } from '../services/authApi'
 import { setSession, setAccessToken } from '../services/authSession'
 import '../styles/login.css'
 
@@ -31,8 +31,11 @@ export default function Login() {
   const [enteredCode, setEnteredCode] = useState('')
   const [codeSentAt, setCodeSentAt] = useState(null)
   const [isSendingCode, setIsSendingCode] = useState(false)
+  const [isVerifyingCode, setIsVerifyingCode] = useState(false)
+  const [isResettingPassword, setIsResettingPassword] = useState(false)
+  const [resetPassword, setResetPassword] = useState('')
+  const [resetPasswordConfirm, setResetPasswordConfirm] = useState('')
   const [codeValidMessage, setCodeValidMessage] = useState('')
-  const [recoveredPassword, setRecoveredPassword] = useState('')
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -112,6 +115,8 @@ export default function Login() {
     setEnteredCode('')
     setCodeSentAt(null)
     setCodeValidMessage('')
+    setResetPassword('')
+    setResetPasswordConfirm('')
   }
 
   const handleCloseResetModal = () => {
@@ -119,6 +124,8 @@ export default function Login() {
     setResetError('')
     setResetSuccess('')
     setCodeValidMessage('')
+    setResetPassword('')
+    setResetPasswordConfirm('')
   }
 
   const handleSendResetCode = async () => {
@@ -142,16 +149,15 @@ export default function Login() {
 
     setCodeSentAt(Date.now())
     setResetStep('code')
-    setResetSuccess('Te enviamos un código de recuperación a tu correo. Revísalo e ingrésalo a continuación.')
+    setResetSuccess('Si el correo está registrado, recibirás un código de recuperación. Ingresa el código a continuación.')
   }
 
   const handleVerifyCode = async () => {
     setResetError('')
     setCodeValidMessage('')
-    setRecoveredPassword('')
 
-    if (!enteredCode.trim()) {
-      setResetError('Por favor ingresa el código de 4 dígitos.')
+    if (!/^\d{6}$/.test(enteredCode.trim())) {
+      setResetError('Ingresa el código de 6 dígitos.')
       return
     }
 
@@ -161,15 +167,52 @@ export default function Login() {
       return
     }
 
-    const response = await verifyResetCode(resetEmail.trim().toLowerCase(), enteredCode.trim())
-    if (!response.success) {
-      setResetError(response.message)
+    setIsVerifyingCode(true)
+    try {
+      const response = await verifyResetCode(resetEmail.trim().toLowerCase(), enteredCode.trim())
+      if (!response.success) {
+        setResetError(response.message)
+        return
+      }
+
+      setResetStep('new-password')
+      setCodeValidMessage(response.message || 'Código válido. Elige una contraseña nueva.')
+    } finally {
+      setIsVerifyingCode(false)
+    }
+  }
+
+  const handleResetPassword = async () => {
+    setResetError('')
+    if (resetPassword.length < 8) {
+      setResetError('La contraseña debe tener al menos 8 caracteres.')
+      return
+    }
+    if (resetPassword !== resetPasswordConfirm) {
+      setResetError('Las contraseñas no coinciden.')
       return
     }
 
-    setRecoveredPassword(response.data.password)
-    setResetStep('revealed')
-    setCodeValidMessage('Código correcto. Aquí está tu contraseña actual:')
+    setIsResettingPassword(true)
+    try {
+      const response = await recoverPassword(
+        resetEmail.trim().toLowerCase(),
+        enteredCode.trim(),
+        resetPassword
+      )
+      if (!response.success) {
+        setResetError(response.message)
+        return
+      }
+
+      setResetStep('completed')
+      setResetPassword('')
+      setResetPasswordConfirm('')
+      setCodeValidMessage('')
+      setResetSuccess(response.message)
+    } finally {
+      setIsResettingPassword(false)
+    }
   }
 
   return (
@@ -297,6 +340,8 @@ export default function Login() {
                   padding: '32px',
                   width: '100%',
                   maxWidth: '420px',
+                  maxHeight: '90vh',
+                  overflowY: 'auto',
                   boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
                   position: 'relative',
                 }}
@@ -320,7 +365,7 @@ export default function Login() {
                 </button>
                 <h3 style={{ marginTop: 0, color: '#2f4f28' }}>Recuperar contraseña</h3>
                 <p style={{ marginBottom: '24px', lineHeight: '1.5' }}>
-                  Ingresa tu correo electrónico y te enviaremos un código de 4 dígitos. El código tiene un límite de 5 minutos.
+                  Ingresa tu correo electrónico y, si está registrado, te enviaremos un código de 6 dígitos válido por 5 minutos.
                 </p>
 
                 {resetStep === 'email' && (
@@ -331,7 +376,8 @@ export default function Login() {
                       </label>
                       <input
                         id="resetEmail"
-                        type="text"
+                        type="email"
+                        autoComplete="email"
                         value={resetEmail}
                         onChange={(e) => setResetEmail(e.target.value)}
                         placeholder="Correo registrado"
@@ -367,7 +413,7 @@ export default function Login() {
                         marginBottom: '20px',
                       }}
                     >
-                      {isSendingCode ? 'Enviando...' : 'Enviar contraseña'}
+                      {isSendingCode ? 'Enviando...' : 'Enviar código'}
                     </button>
                   </>
                 )}
@@ -375,15 +421,17 @@ export default function Login() {
                 {resetStep === 'code' && (
                   <div style={{ marginBottom: '20px' }}>
                     <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }} htmlFor="resetCode">
-                      Código de 4 dígitos
+                      Código de 6 dígitos
                     </label>
                     <input
                       id="resetCode"
                       type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
                       value={enteredCode}
-                      onChange={(e) => setEnteredCode(e.target.value)}
+                      onChange={(e) => setEnteredCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                       placeholder="Ingresa el código"
-                      maxLength={4}
+                      maxLength={6}
                       style={{
                         width: '100%',
                         padding: '12px 14px',
@@ -395,6 +443,7 @@ export default function Login() {
                     <button
                       type="button"
                       onClick={handleVerifyCode}
+                      disabled={isVerifyingCode}
                       style={{
                         width: '100%',
                         padding: '12px 14px',
@@ -407,7 +456,7 @@ export default function Login() {
                         marginTop: '12px',
                       }}
                     >
-                      Verificar código
+                      {isVerifyingCode ? 'Verificando...' : 'Verificar código'}
                     </button>
                     <p style={{ marginTop: '12px', fontSize: '13px', color: '#555' }}>
                       El código caduca 5 minutos después de ser enviado.
@@ -415,28 +464,86 @@ export default function Login() {
                   </div>
                 )}
 
-                {resetStep === 'revealed' && (
+                {resetStep === 'new-password' && (
                   <div style={{ marginBottom: '20px' }}>
-                    <p style={{ marginBottom: '12px', color: '#2f4f28', fontWeight: 600 }}>
-                      Contraseña actual encontrada:
-                    </p>
-                    <div
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }} htmlFor="newResetPassword">
+                      Nueva contraseña
+                    </label>
+                    <input
+                      id="newResetPassword"
+                      type="password"
+                      autoComplete="new-password"
+                      minLength={8}
+                      value={resetPassword}
+                      onChange={(e) => setResetPassword(e.target.value)}
+                      placeholder="Mínimo 8 caracteres"
                       style={{
                         width: '100%',
-                        padding: '14px',
+                        padding: '12px 14px',
                         borderRadius: '8px',
-                        backgroundColor: '#f4f9f0',
-                        border: '1px solid #c8dfc2',
-                        color: '#1d3b1c',
-                        fontSize: '15px',
-                        wordBreak: 'break-all',
+                        border: '1px solid #ccc',
+                        fontSize: '14px',
+                        marginBottom: '12px',
+                      }}
+                    />
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }} htmlFor="confirmResetPassword">
+                      Confirmar nueva contraseña
+                    </label>
+                    <input
+                      id="confirmResetPassword"
+                      type="password"
+                      autoComplete="new-password"
+                      minLength={8}
+                      value={resetPasswordConfirm}
+                      onChange={(e) => setResetPasswordConfirm(e.target.value)}
+                      placeholder="Repite la nueva contraseña"
+                      style={{
+                        width: '100%',
+                        padding: '12px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid #ccc',
+                        fontSize: '14px',
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleResetPassword}
+                      disabled={isResettingPassword}
+                      style={{
+                        width: '100%',
+                        padding: '12px 14px',
+                        borderRadius: '8px',
+                        border: 'none',
+                        backgroundColor: '#2f4f28',
+                        color: 'white',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        marginTop: '12px',
                       }}
                     >
-                      {recoveredPassword}
-                    </div>
+                      {isResettingPassword ? 'Actualizando...' : 'Actualizar contraseña'}
+                    </button>
                   </div>
                 )}
 
+                {resetStep === 'completed' && (
+                  <button
+                    type="button"
+                    onClick={handleCloseResetModal}
+                    style={{
+                      width: '100%',
+                      padding: '12px 14px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      backgroundColor: '#2f4f28',
+                      color: 'white',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Volver al inicio de sesión
+                  </button>
+                )}
                 {resetError && (
                   <p style={{ color: '#e74c3c', marginBottom: '12px' }}>{resetError}</p>
                 )}

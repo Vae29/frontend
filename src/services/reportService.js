@@ -2,7 +2,7 @@ import httpClient from './httpClient.js';
 
 async function getJson(response) {
   if (response.success === false) {
-    return { success: false, error: response.message || 'Error en la respuesta' };
+    return { success: false, error: response.error || response.message || 'Error en la respuesta' };
   }
   return response;
 }
@@ -14,7 +14,13 @@ export async function fetchReportFilters(fincaId) {
     return await getJson(response.data);
   } catch (error) {
     console.error('fetchReportFilters error', error);
-    return { success: false, error: error.response?.data?.message || 'Error de red' };
+    return {
+      success: false,
+      error:
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        'Error de red',
+    };
   }
 }
 
@@ -24,7 +30,13 @@ export async function fetchReportPorCultivo(filters = {}) {
     return await getJson(response.data);
   } catch (error) {
     console.error('fetchReportPorCultivo error', error);
-    return { success: false, error: error.response?.data?.message || 'Error de red' };
+    return {
+      success: false,
+      error:
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        'Error de red',
+    };
   }
 }
 
@@ -34,7 +46,13 @@ export async function fetchReportCostos(filters = {}) {
     return await getJson(response.data);
   } catch (error) {
     console.error('fetchReportCostos error', error);
-    return { success: false, error: error.response?.data?.message || 'Error de red' };
+    return {
+      success: false,
+      error:
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        'Error de red',
+    };
   }
 }
 
@@ -44,7 +62,13 @@ export async function fetchReportProduccion(filters = {}) {
     return await getJson(response.data);
   } catch (error) {
     console.error('fetchReportProduccion error', error);
-    return { success: false, error: error.response?.data?.message || 'Error de red' };
+    return {
+      success: false,
+      error:
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        'Error de red',
+    };
   }
 }
 
@@ -54,7 +78,13 @@ export async function fetchReportRentabilidad(filters = {}) {
     return await getJson(response.data);
   } catch (error) {
     console.error('fetchReportRentabilidad error', error);
-    return { success: false, error: error.response?.data?.message || 'Error de red' };
+    return {
+      success: false,
+      error:
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        'Error de red',
+    };
   }
 }
 
@@ -64,7 +94,13 @@ export async function fetchReportTrabajador(filters = {}) {
     return await getJson(response.data);
   } catch (error) {
     console.error('fetchReportTrabajador error', error);
-    return { success: false, error: error.response?.data?.message || 'Error de red' };
+    return {
+      success: false,
+      error:
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        'Error de red',
+    };
   }
 }
 
@@ -74,7 +110,13 @@ export async function fetchReportQuery(reportType, filters = {}) {
     return await getJson(response.data);
   } catch (error) {
     console.error('fetchReportQuery error', error);
-    return { success: false, error: error.response?.data?.message || 'Error de red' };
+    return {
+      success: false,
+      error:
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        'Error de red',
+    };
   }
 }
 
