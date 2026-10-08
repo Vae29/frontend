@@ -216,14 +216,13 @@ export async function requestPasswordReset(email) {
   }
 }
 
-export async function recoverPassword(email) {
+export async function recoverPassword(email, code, password) {
   try {
-    const response = await httpClient.post('/auth/recover-password', { email });
+    const response = await httpClient.post('/auth/recover-password', { email, code, password });
 
     if (response.data.success) {
       return {
         success: true,
-        data: response.data.data,
         message: response.data.message,
       };
     }
