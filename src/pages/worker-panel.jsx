@@ -270,13 +270,12 @@ export default function WorkerPanel() {
   const [elementosOpen, setElementosOpen] = useState(false)
   const [elementosRows, setElementosRows] = useState([])
   const [usuarioFincas, setUsuarioFincas] = useState([])
-  const [isLoadingFincas, setIsLoadingFincas] = useState(false)
+  const [isLoadingFincas, setIsLoadingFincas] = useState(true)
+  const [fincasError, setFincasError] = useState('')
 
-  const trabajadorFincas = useMemo(() => (worker ? Agro.getTrabajadorFincas(worker.id) : []), [worker])
   const fincasAsignadas = useMemo(() => {
-    const sourceFincas = usuarioFincas.length > 0 ? usuarioFincas : trabajadorFincas
-    return sourceFincas.filter((finca) => getRegistroEstado(finca) === 'ACTIVO')
-  }, [usuarioFincas, trabajadorFincas])
+    return usuarioFincas.filter((finca) => getRegistroEstado(finca) === 'ACTIVO')
+  }, [usuarioFincas])
 
   const [cultivosFinca, setCultivosFinca] = useState([])
   const [isLoadingCultivosFinca, setIsLoadingCultivosFinca] = useState(false)
@@ -291,16 +290,24 @@ export default function WorkerPanel() {
     const loadFincas = async () => {
       if (!worker) {
         setUsuarioFincas([])
+        setFincasError('')
+        setIsLoadingFincas(false)
         return
       }
       try {
         setIsLoadingFincas(true)
+        setFincasError('')
         const response = await fetchFincasPorUsuario()
-        const list = response?.success ? response.data : []
-        setUsuarioFincas(Array.isArray(list) ? list : [])
+        if (!response?.success || !Array.isArray(response.data)) {
+          setUsuarioFincas([])
+          setFincasError(response?.message || 'No se pudieron cargar tus fincas asignadas.')
+          return
+        }
+        setUsuarioFincas(response.data)
       } catch (error) {
         console.error('Error cargando fincas del trabajador:', error)
         setUsuarioFincas([])
+        setFincasError('No se pudieron cargar tus fincas asignadas.')
       } finally {
         setIsLoadingFincas(false)
       }
@@ -312,8 +319,8 @@ export default function WorkerPanel() {
   const validFincaId = useMemo(() => {
     if (!worker || fincasAsignadas.length === 0) return ''
     const selectedFincaId = Number(fincaId)
-    if (selectedFincaId && fincasAsignadas.some((f) => f.id === selectedFincaId)) return selectedFincaId
-    return fincasAsignadas[0].id
+    if (selectedFincaId && fincasAsignadas.some((f) => Number(f.id) === selectedFincaId)) return selectedFincaId
+    return Number(fincasAsignadas[0].id)
   }, [worker, fincasAsignadas, fincaId])
 
   useEffect(() => {
@@ -1531,6 +1538,7 @@ export default function WorkerPanel() {
       <Sidebar
         roleSubtitle="Rol: Trabajador"
         fincaOptions={fincasAsignadas}
+        fincaLoading={isLoadingFincas}
         fincaValue={validFincaId ? String(validFincaId) : ''}
         onFincaChange={(id) => setFincaId(id)}
         navItems={navItems}
@@ -1549,6 +1557,12 @@ export default function WorkerPanel() {
         />
 
         <div className="content-container">
+          {fincasError ? (
+            <div className="dashboard-error" role="alert">{fincasError}</div>
+          ) : !isLoadingFincas && fincasAsignadas.length === 0 ? (
+            <div className="dashboard-empty" role="status">No tienes fincas activas asignadas.</div>
+          ) : null}
+
           <section id="inicio-section" className={`content-section ${activeSection === 'inicio' ? 'active' : ''}`}>
             <div className="welcome-container">
               <h2 id="welcomeMessage">¡Bienvenido, {workerFullName}!</h2>
