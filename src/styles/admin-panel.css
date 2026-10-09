@@ -29,6 +29,7 @@
     --bg-dark: #2a3f2f;
     --bg-white: white;
     --bg-header: #fefbe9;
+    --selected-surface: #f4faf0;
     
     /* Colores de Texto */
     --text-dark: #3d3c3c;
@@ -106,6 +107,7 @@ html.dark-mode {
     --bg-aside: #14221a;
     --bg-header: #152a21;
     --bg-white: #1d2c23;
+    --selected-surface: rgba(125, 255, 176, 0.12);
     --text-dark: #eef1ea;
     --text-light: #b8c3b6;
     --text-white: #ffffff;
@@ -2398,6 +2400,52 @@ html.dark-mode .modal-overlay select:focus {
     border-color: #7DFFB0;
     box-shadow: 0 0 8px rgba(125, 255, 176, 0.3);
     outline: none;
+}
+
+html.dark-mode .dynamic-modal-content {
+    background-color: var(--bg-white) !important;
+    color: var(--text-dark);
+    border: 1px solid var(--border-color);
+}
+
+html.dark-mode .dynamic-modal-content h2,
+html.dark-mode .dynamic-modal-content label {
+    color: var(--text-dark) !important;
+}
+
+html.dark-mode .dynamic-modal-content input:not([type='checkbox']),
+html.dark-mode .dynamic-modal-content textarea,
+html.dark-mode .dynamic-modal-content select {
+    background-color: var(--bg-light) !important;
+    color: var(--text-dark) !important;
+    -webkit-text-fill-color: var(--text-dark) !important;
+    border-color: var(--border-color) !important;
+}
+
+html.dark-mode .dynamic-modal-content input::placeholder,
+html.dark-mode .dynamic-modal-content textarea::placeholder {
+    color: var(--text-light) !important;
+    opacity: 1;
+}
+
+html.dark-mode .dynamic-modal-content option {
+    background-color: var(--bg-white) !important;
+    color: var(--text-dark) !important;
+}
+
+html.dark-mode .dynamic-modal-content .dynamic-modal-cancel {
+    background-color: var(--bg-light) !important;
+    color: var(--text-dark) !important;
+    border-color: var(--border-color) !important;
+}
+
+html.dark-mode .dynamic-modal-content .dynamic-modal-submit {
+    background-color: #7dffb0 !important;
+    color: #14221a !important;
+}
+
+html.dark-mode .dynamic-modal-content .dynamic-modal-submit:hover {
+    background-color: #9bffc2 !important;
 }
 
 /* Elementos de tabla y cards en modo oscuro */

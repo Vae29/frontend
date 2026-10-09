@@ -156,44 +156,8 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
 
   return (
     <>
-      <style>{`
-        .modal-overlay input::placeholder {
-          color: #b0b0b0 !important;
-          opacity: 1 !important;
-        }
-        .modal-overlay input::-webkit-input-placeholder {
-          color: #b0b0b0 !important;
-        }
-        .modal-overlay input::-moz-placeholder {
-          color: #b0b0b0 !important;
-          opacity: 1 !important;
-        }
-        .modal-overlay input:-ms-input-placeholder {
-          color: #b0b0b0 !important;
-        }
-        .modal-overlay textarea::placeholder {
-          color: #b0b0b0 !important;
-          opacity: 1 !important;
-        }
-        .modal-overlay textarea::-webkit-input-placeholder {
-          color: #b0b0b0 !important;
-        }
-        .modal-overlay textarea::-moz-placeholder {
-          color: #b0b0b0 !important;
-          opacity: 1 !important;
-        }
-        .modal-overlay textarea:-ms-input-placeholder {
-          color: #b0b0b0 !important;
-        }
-        .dynamic-modal-input {
-          background-color: white !important;
-        }
-        .dynamic-modal-textarea {
-          background-color: white !important;
-        }
-      `}</style>
     <div
-      className="modal-overlay"
+      className="modal-overlay dynamic-modal-overlay"
       style={{
         position: 'fixed',
         top: 0,
@@ -215,9 +179,10 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
       }}
     >
       <div
-        className="modal-content"
+        className="modal-content dynamic-modal-content"
         style={{
-          backgroundColor: 'white',
+          backgroundColor: 'var(--bg-white)',
+          color: 'var(--text-dark)',
           borderRadius: '12px',
           padding: '40px',
           maxWidth: '500px',
@@ -235,7 +200,7 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
         <h2
           style={{
             marginBottom: '30px',
-            color: 'var(--color-verde-oscuro)',
+            color: 'var(--text-dark)',
             fontFamily: "var(--font-titulo, 'Playfair Display')",
           }}
         >
@@ -258,7 +223,7 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
                       display: 'block',
                       marginBottom: '8px',
                       fontWeight: '600',
-                      color: 'var(--color-verde-oscuro)',
+                      color: 'var(--text-dark)',
                     }}
                   >
                     {field.label}
@@ -268,6 +233,7 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
                   {field.type === 'multiselect-search' ? (
                 <>
                   <input
+                    className="dynamic-modal-input"
                     type="text"
                     value={filterQueries[field.name] || ''}
                     placeholder={field.searchPlaceholder || `Buscar ${field.label}`}
@@ -295,7 +261,7 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
                       padding: '10px',
                       border: `2px solid ${errors[field.name] ? '#e74c3c' : '#e8e8e8'}`,
                       borderRadius: '8px',
-                      backgroundColor: '#fff',
+                              backgroundColor: 'var(--bg-white)',
                     }}
                   >
                     {(fieldOptions[field.name] || field.options || [])
@@ -326,7 +292,7 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
                               cursor: 'pointer',
                               padding: '8px',
                               borderRadius: '8px',
-                              backgroundColor: isChecked ? '#f4faf0' : 'transparent',
+                              backgroundColor: isChecked ? 'var(--selected-surface)' : 'transparent',
                             }}
                           >
                             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
@@ -337,9 +303,9 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
                                 style={{ marginTop: '3px' }}
                               />
                               <div style={{ flex: 1 }}>
-                                <div style={{ fontWeight: 500, color: '#5a5a5a' }}>{option.label || optionValue}</div>
+                                <div style={{ fontWeight: 500, color: 'var(--text-dark)' }}>{option.label || optionValue}</div>
                                 {option.description && (
-                                  <div style={{ fontSize: '12px', color: '#8a8a8a', marginTop: '4px' }}>
+                                  <div style={{ fontSize: '12px', color: 'var(--text-light)', marginTop: '4px' }}>
                                     {option.description}
                                   </div>
                                 )}
@@ -362,7 +328,7 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
                           .includes(query)
                       )
                     }).length === 0 && (
-                      <p style={{ color: '#777', margin: '0' }}>No se encontraron opciones.</p>
+                      <p style={{ color: 'var(--text-light)', margin: '0' }}>No se encontraron opciones.</p>
                     )}
                   </div>
                 </>
@@ -431,6 +397,8 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
                     boxSizing: 'border-box',
                     transition: 'all 0.3s ease',
                     resize: 'vertical',
+                    backgroundColor: 'var(--bg-white)',
+                    color: 'var(--text-dark)',
                   }}
                   onMouseEnter={(e) => {
                     if (!errors[field.name] && focusedField !== field.name) {
@@ -474,8 +442,8 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
                       outline: 'none',
                       boxShadow: 'none',
                       WebkitBoxShadow: 'none',
-                      color: '#333',
-                      WebkitTextFillColor: '#333',
+                      color: 'var(--text-dark)',
+                      WebkitTextFillColor: 'var(--text-dark)',
                       cursor: field.readOnly ? 'default' : 'text',
                     }}
                     onMouseEnter={(e) => {
@@ -511,7 +479,7 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        color: 'var(--color-verde-oscuro)',
+                        color: 'var(--text-dark)',
                       }}
                       title={showPassword[field.name] ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                     >
@@ -547,6 +515,7 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
             <button
               type="button"
               onClick={handleCancel}
+              className="dynamic-modal-cancel"
               style={{
                 padding: '10px 24px',
                 border: '2px solid #ddd',
@@ -570,11 +539,12 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
             </button>
             <button
               type="submit"
+              className="dynamic-modal-submit"
               style={{
                 padding: '10px 24px',
                 border: 'none',
                 borderRadius: '8px',
-                backgroundColor: 'var(--color-verde-oscuro)',
+                backgroundColor: 'var(--color-verde-oscuro, #47663c)',
                 color: 'white',
                 fontWeight: '600',
                 cursor: 'pointer',
@@ -586,7 +556,7 @@ export function DynamicModal({ isOpen, modalType, onClose, onSubmit, title, subm
                 e.target.style.backgroundColor = '#3d5231'
               }}
               onMouseLeave={(e) => {
-                e.target.style.backgroundColor = 'var(--color-verde-oscuro)'
+                e.target.style.backgroundColor = 'var(--color-verde-oscuro, #47663c)'
               }}
             >
               {submitButtonText || config.submitButtonText}

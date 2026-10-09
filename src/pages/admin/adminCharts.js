@@ -12,8 +12,16 @@ function destroyIfExists(canvas) {
   if (existing) existing.destroy()
 }
 
+function applyChartTheme() {
+  const isDarkMode = document.documentElement.classList.contains('dark-mode')
+  Chart.defaults.color = isDarkMode ? '#eef1ea' : '#3d3c3c'
+  Chart.defaults.borderColor = isDarkMode ? 'rgba(238, 241, 234, 0.22)' : 'rgba(61, 60, 60, 0.18)'
+  Chart.defaults.scale.grid.color = isDarkMode ? 'rgba(238, 241, 234, 0.14)' : 'rgba(61, 60, 60, 0.12)'
+}
+
 export function updateAdminDashboardCharts(dashboardData, refs) {
   if (!dashboardData) return
+  applyChartTheme()
   const { chartProduccion, chartCostos, chartCategoriaCostos, chartRentabilidad } = refs
   const { productionTrend = [], costTrend = [], costByCategory = [], rentability = [] } = dashboardData
 
@@ -126,6 +134,7 @@ export function updateAdminDashboardCharts(dashboardData, refs) {
 
 export function updateRentabilidadCharts(dashboardData, refs) {
   if (!dashboardData) return
+  applyChartTheme()
   const { chartRentabilidadDetallada, chartComparativaIngresosCostos } = refs
   const rentability = Array.isArray(dashboardData.rentability) ? dashboardData.rentability : []
   const labels = rentability.map((item) => item.nombre)
