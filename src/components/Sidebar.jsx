@@ -1,6 +1,7 @@
 export default function Sidebar({
   roleSubtitle,
   fincaOptions = [],
+  fincaLoading = false,
   fincaValue,
   onFincaChange,
   navItems,
@@ -51,8 +52,12 @@ export default function Sidebar({
           id="fincaSelect"
           className="select-finca"
           value={fincaValue}
+          disabled={displayOptions.length === 0}
           onChange={(e) => onFincaChange(e.target.value)}
         >
+          <option value="" disabled>
+            {fincaLoading ? 'Cargando fincas...' : displayOptions.length ? 'Selecciona una finca' : 'Sin fincas activas'}
+          </option>
           {displayOptions.map((f) => (
             <option key={f.id} value={f.id}>
               {f.nombre}

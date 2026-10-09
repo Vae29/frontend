@@ -374,6 +374,8 @@ export default function AdminPanel() {
   const [modalInitialData, setModalInitialData] = useState(undefined)
   const [fincas, setFincas] = useState([])
   const [fincasSelectorOptions, setFincasSelectorOptions] = useState([])
+  const [isLoadingFincasSelector, setIsLoadingFincasSelector] = useState(true)
+  const [fincasSelectorError, setFincasSelectorError] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [isLoadingFincas, setIsLoadingFincas] = useState(false)
   const [dashboardData, setDashboardData] = useState(null)
@@ -465,7 +467,7 @@ export default function AdminPanel() {
 
   // Escucha el evento global de cambio de finca y actualiza el estado local.
   useEffect(() => {
-    const handler = () => setFincaId(Agro.getSelectedFincaId())
+    const handler = (event) => setFincaId(event.detail?.fincaId ?? Agro.getSelectedFincaId())
     window.addEventListener('agro:fincaChanged', handler)
     return () => window.removeEventListener('agro:fincaChanged', handler)
   }, [])
@@ -1138,12 +1140,22 @@ export default function AdminPanel() {
 
   const fetchFincasSelectorOptions = useCallback(
     async () => {
+      setIsLoadingFincasSelector(true)
+      setFincasSelectorError(null)
       try {
         const lista = await fetchFincas('', 'ACTIVO')
         const fincasArray = Array.isArray(lista) ? lista : Array.isArray(lista?.data) ? lista.data : []
-        setFincasSelectorOptions(fincasArray)
+        const fincasReales = fincasArray.filter((finca) => isValidFincaId(finca.id))
+        setFincasSelectorOptions(fincasReales)
+        if (fincasReales.length === 0) {
+          setFincasSelectorError('No hay fincas activas disponibles para consultar el dashboard.')
+        }
       } catch (error) {
         console.error('Error cargando opciones de fincas para selector:', error)
+        setFincasSelectorOptions([])
+        setFincasSelectorError('No se pudieron cargar las fincas reales. Intenta nuevamente.')
+      } finally {
+        setIsLoadingFincasSelector(false)
       }
     },
     []
@@ -1163,18 +1175,26 @@ export default function AdminPanel() {
   }, [fetchFincasSelectorOptions])
 
   useEffect(() => {
+    if (isLoadingFincasSelector) return
+
     const selectedFincaExists = fincasSelectorOptions.some(
       (finca) => isValidFincaId(finca.id) && String(finca.id) === String(fincaId)
     )
     if (selectedFincaExists) return
 
     const firstNumericFinca = fincasSelectorOptions.find((finca) => isValidFincaId(finca.id))
-    if (!firstNumericFinca) return
+    if (!firstNumericFinca) {
+      if (fincaId) {
+        setFincaId('')
+        Agro.setSelectedFincaId('')
+      }
+      return
+    }
 
     const selectedId = String(Number(firstNumericFinca.id))
     setFincaId(selectedId)
     Agro.setSelectedFincaId(selectedId)
-  }, [fincaId, fincasSelectorOptions])
+  }, [fincaId, fincasSelectorOptions, isLoadingFincasSelector])
 
   useEffect(() => {
     const id = window.setTimeout(() => {
@@ -1184,8 +1204,32 @@ export default function AdminPanel() {
   }, [searchTerm, fetchFincasList, fincasRefresh, fincasEstado])
 
   useEffect(() => {
+    if (isLoadingFincasSelector) return
+
+    const selectedFincaExists = fincasSelectorOptions.some(
+      (finca) => isValidFincaId(finca.id) && String(finca.id) === String(fincaId)
+    )
+    if (!selectedFincaExists) {
+      dashboardRequestIdRef.current += 1
+      setDashboardData(null)
+      setDashboardError(
+        fincasSelectorError || 'Selecciona una finca real disponible para consultar el dashboard.'
+      )
+      setIsLoadingDashboard(false)
+      return
+    }
+
     fetchDashboardData(fincaId, dashboardMonth, dashboardYear)
-  }, [fincaId, fincasRefresh, dashboardMonth, dashboardYear, fetchDashboardData])
+  }, [
+    fincaId,
+    fincasRefresh,
+    dashboardMonth,
+    dashboardYear,
+    fetchDashboardData,
+    fincasSelectorOptions,
+    fincasSelectorError,
+    isLoadingFincasSelector,
+  ])
 
   useEffect(() => {
     fetchCultivosData(fincaId)
@@ -3226,6 +3270,7 @@ export default function AdminPanel() {
       <Sidebar
         roleSubtitle="Rol: Administrador"
         fincaOptions={fincasSelectorOptions}
+        fincaLoading={isLoadingFincasSelector}
         fincaValue={fincaId}
         onFincaChange={onFincaChange}
         navItems={navItems}
