@@ -531,6 +531,15 @@ html.dark-mode .logout-btn {
     transition: transform 0.3s ease;
 }
 
+.toggle-switch input:checked + .slider::before {
+    transform: translateX(26px);
+}
+
+.toggle-switch input:focus-visible + .slider {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 3px;
+}
+
 html.dark-mode .toggle-switch .slider {
     background-color: rgba(125, 255, 176, 0.2);
 }
