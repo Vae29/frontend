@@ -127,13 +127,15 @@ export function updateAdminDashboardCharts(dashboardData, refs) {
 export function updateRentabilidadCharts(dashboardData, refs) {
   if (!dashboardData) return
   const { chartRentabilidadDetallada, chartComparativaIngresosCostos } = refs
-  const { rentability = [] } = dashboardData
+  const rentability = Array.isArray(dashboardData.rentability) ? dashboardData.rentability : []
   const labels = rentability.map((item) => item.nombre)
   const rows = rentability.map((item) => {
     const ingresos = safeNumber(item.ingresos)
     const costos = safeNumber(item.costo)
     const ganancia = safeNumber(item.ganancia)
-    const margen = ingresos > 0 ? ((ganancia / ingresos) * 100) : 0
+    const margen = item.margen != null && Number.isFinite(Number(item.margen))
+      ? Number(item.margen)
+      : ingresos > 0 ? ((ganancia / ingresos) * 100) : 0
     return { ingresos, costos, ganancia, margen }
   })
 
@@ -192,5 +194,11 @@ export function updateRentabilidadCharts(dashboardData, refs) {
         scales: { y: { ticks: { callback: (v) => '$' + Number(v).toLocaleString() } } },
       },
     })
+  }
+}
+
+export function clearRentabilidadCharts(refs) {
+  for (const chartRef of [refs.chartRentabilidadDetallada, refs.chartComparativaIngresosCostos]) {
+    if (chartRef?.current) destroyIfExists(chartRef.current)
   }
 }

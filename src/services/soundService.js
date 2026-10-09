@@ -7,7 +7,11 @@
 class SoundService {
   constructor() {
     this.audioContext = null;
-    this.isMuted = localStorage.getItem('soundsMuted') === 'true';
+    const soundsEnabled = localStorage.getItem('soundsEnabled');
+    const soundsMuted = localStorage.getItem('soundsMuted');
+    this.isMuted = soundsEnabled !== null
+      ? soundsEnabled !== 'true'
+      : soundsMuted === 'true';
     this.volume = parseFloat(localStorage.getItem('soundsVolume') || '0.3');
   }
 
@@ -135,8 +139,9 @@ class SoundService {
    * @param {boolean} mute - true para silenciar, false para reactivar
    */
   setMute(mute) {
-    this.isMuted = mute;
-    localStorage.setItem('soundsMuted', mute);
+    this.isMuted = Boolean(mute);
+    localStorage.setItem('soundsMuted', String(this.isMuted));
+    localStorage.setItem('soundsEnabled', String(!this.isMuted));
   }
 
   /**

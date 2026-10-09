@@ -12,7 +12,7 @@ import Sidebar from '../components/Sidebar'
 import DynamicModal from '../components/DynamicModal'
 import ReasonModal from '../components/ReasonModal'
 import { StateFilterMenu } from '../components/StateFilters'
-import { updateAdminDashboardCharts, updateRentabilidadCharts } from './admin/adminCharts'
+import { clearRentabilidadCharts, updateAdminDashboardCharts, updateRentabilidadCharts } from './admin/adminCharts'
 import { AdminReportTable } from './admin/AdminReportViews'
 import '../styles/dashboard.css'
 import '../styles/admin-panel.css'
@@ -453,6 +453,7 @@ export default function AdminPanel() {
 
   // Refs para elementos DOM y gráficos.
   const reportRef = useRef(null)
+  const dashboardRequestIdRef = useRef(0)
   const cpRef = useRef(null)
   const ccRef = useRef(null)
   const ccatRef = useRef(null)
@@ -664,23 +665,36 @@ export default function AdminPanel() {
 
     const fetchDashboardData = useCallback(
     async (selectedFincaId, month, year) => {
-      if (!selectedFincaId) return
+        const requestId = ++dashboardRequestIdRef.current
       const fincaNumericId = Number(selectedFincaId)
-      if (!Number.isInteger(fincaNumericId) || fincaNumericId <= 0) return
-      try {
+      if (!Number.isInteger(fincaNumericId) || fincaNumericId <= 0) {
+          setDashboardData(null)
+          setDashboardError('Selecciona una finca válida para consultar Rentabilidad.')
+          setIsLoadingDashboard(false)
+          return
+        }
+
+        setDashboardData(null)
+        setDashboardError(null)
         setIsLoadingDashboard(true)
-        const data = await fetchDashboardForFinca(fincaNumericId, {
-          month,
-          year,
-        })
+      try {
+          const data = await fetchDashboardForFinca(fincaNumericId, { month, year })
+          if (requestId !== dashboardRequestIdRef.current) return
         setDashboardData(data)
         setDashboardError(null)
       } catch (error) {
-        console.error(error)
+          if (requestId !== dashboardRequestIdRef.current) return
+          console.error('[admin-panel] Error cargando dashboard', {
+            fincaId: fincaNumericId,
+            month,
+            year,
+            status: error.cause?.response?.status,
+            error,
+          })
         setDashboardData(null)
-        setDashboardError('No se pudo cargar el dashboard')
+          setDashboardError(error.message || 'No se pudo cargar el dashboard.')
       } finally {
-        setIsLoadingDashboard(false)
+          if (requestId === dashboardRequestIdRef.current) setIsLoadingDashboard(false)
       }
     },
     []
@@ -1169,6 +1183,20 @@ export default function AdminPanel() {
   useEffect(() => {
     fetchFincasSelectorOptions()
   }, [fetchFincasSelectorOptions])
+
+  useEffect(() => {
+    const selectedFincaExists = fincasSelectorOptions.some(
+      (finca) => isValidFincaId(finca.id) && String(finca.id) === String(fincaId)
+    )
+    if (selectedFincaExists) return
+
+    const firstNumericFinca = fincasSelectorOptions.find((finca) => isValidFincaId(finca.id))
+    if (!firstNumericFinca) return
+
+    const selectedId = String(Number(firstNumericFinca.id))
+    setFincaId(selectedId)
+    Agro.setSelectedFincaId(selectedId)
+  }, [fincaId, fincasSelectorOptions])
 
   useEffect(() => {
     const id = window.setTimeout(() => {
@@ -2538,7 +2566,8 @@ export default function AdminPanel() {
     }
 
     const rentabilityActivos = (dashboardData?.rentability || []).filter((row) => {
-      const raw = row.estado_registro ?? row.estadoRegistro ?? row.estado ?? row.activo
+      const raw = row.estado_registro ?? row.estadoRegistro ?? row.activo
+      if (raw == null) return true
       return normalizeEstadoRegistro(raw) === 'ACTIVO'
     })
 
@@ -2821,32 +2850,26 @@ export default function AdminPanel() {
       return true
     })
   }, [detalleCosechas, detalleCosechasEstado, cosechaFilterFechaDesde, cosechaFilterFechaHasta])
-  const rentabilidadRows = (dashboardDataActivos?.rentability || dashboardData?.rentability || [])
-    .filter((row) => {
-      const estadoRegistro = getRegistroEstado(row)
-      if (estadoRegistro == null) return true
-      if (estadoRegistro === 'ACTIVO') return true
-      if (estadoRegistro === 'ANULADO') return false
-      return true
-    })
-    .map((row) => {
-      const ingresos = Number(row.ingresos) || 0
-      const costo = Number(row.costo) || 0
-      const ganancia = Number(row.ganancia) || 0
-      const margen = Number.isFinite(Number(row.margen))
-        ? Number(row.margen)
-        : ingresos > 0
-        ? ((ganancia / ingresos) * 100)
-        : 0
+  const rentabilidadRows = useMemo(() =>
+    (dashboardDataActivos?.rentability || dashboardData?.rentability || [])
+      .filter((row) => {
+        const raw = row.estado_registro ?? row.estadoRegistro ?? row.activo
+        if (raw == null) return true
+        const state = String(raw).trim().toUpperCase()
+        return !['0', 'FALSE', 'F', 'ANULADO', 'INACTIVO', 'DESACTIVADO', 'ELIMINADO'].includes(state)
+      })
+      .map((row) => {
+        const ingresos = Number(row.ingresos) || 0
+        const costo = Number(row.costo) || 0
+        const ganancia = Number(row.ganancia) || 0
+        const margen = row.margen != null && Number.isFinite(Number(row.margen))
+          ? Number(row.margen)
+          : ingresos > 0 ? (ganancia / ingresos) * 100 : 0
 
-      return {
-        ...row,
-        ingresos,
-        costo,
-        ganancia,
-        margen,
-      }
-    })
+        return { ...row, ingresos, costo, ganancia, margen }
+      }),
+    [dashboardData, dashboardDataActivos]
+  )
 
   const rentabilidadTotals = useMemo(() => {
     const rows = rentabilidadRows || []
@@ -2937,16 +2960,24 @@ export default function AdminPanel() {
 
   // Cuando estamos en la sección de rentabilidad, actualiza sus gráficos.
   useEffect(() => {
-    if (activeSection !== 'rentabilidad' || !dashboardData) return
+    const chartRefs = {
+      chartRentabilidadDetallada: crdRef,
+      chartComparativaIngresosCostos: cicRef,
+    }
+    if (activeSection !== 'rentabilidad') return
+    if (isLoadingDashboard || dashboardError || !dashboardData || rentabilidadRows.length === 0) {
+      clearRentabilidadCharts(chartRefs)
+      return
+    }
     const activeDashboardData = dashboardDataActivos || dashboardData
     const id = window.setTimeout(() => {
-      updateRentabilidadCharts(activeDashboardData, {
-        chartRentabilidadDetallada: crdRef,
-        chartComparativaIngresosCostos: cicRef,
-      })
+      updateRentabilidadCharts(activeDashboardData, chartRefs)
     }, 120)
-    return () => window.clearTimeout(id)
-  }, [activeSection, dashboardData, dashboardDataActivos])
+    return () => {
+      window.clearTimeout(id)
+      clearRentabilidadCharts(chartRefs)
+    }
+  }, [activeSection, dashboardData, dashboardDataActivos, dashboardError, isLoadingDashboard, rentabilidadRows.length])
 
   // Escucha el evento de cambio de finca y actualiza los gráficos de la sección activa.
   useEffect(() => {
@@ -3216,7 +3247,7 @@ export default function AdminPanel() {
       {/* Barra lateral con navegación, selección de finca y opción de cerrar sesión. */}
       <Sidebar
         roleSubtitle="Rol: Administrador"
-        fincaOptions={fincasSelectorOptions.length > 0 ? fincasSelectorOptions : Agro.fincas}
+        fincaOptions={fincasSelectorOptions}
         fincaValue={fincaId}
         onFincaChange={onFincaChange}
         navItems={navItems}
@@ -4764,7 +4795,37 @@ export default function AdminPanel() {
             <div className="section-header">
               <h2>Análisis de Rentabilidad</h2>
             </div>
-            <div className="charts-grid">
+            {!isValidFincaId(fincaId) ? (
+              <div className="dashboard-error" role="status">Selecciona una finca válida para consultar su rentabilidad.</div>
+            ) : isLoadingDashboard ? (
+              <div className="dashboard-loading" role="status">Cargando análisis de rentabilidad...</div>
+            ) : dashboardError ? (
+              <div className="dashboard-error" role="alert">{dashboardError}</div>
+            ) : !dashboardData ? (
+              <div className="dashboard-empty" role="status">No se recibieron datos del dashboard.</div>
+            ) : rentabilidadRows.length === 0 ? (
+              <div className="dashboard-empty" role="status">No hay datos de costos o ingresos para analizar en esta finca.</div>
+            ) : (
+              <div className="reporte-resumen">
+                <div className="resumen-item">
+                  <label>Ingresos</label>
+                  <div className="valor">{Agro.formatCOP(rentabilidadTotals.totalIngresos)}</div>
+                </div>
+                <div className="resumen-item">
+                  <label>Costos</label>
+                  <div className="valor">{Agro.formatCOP(rentabilidadTotals.totalCosto)}</div>
+                </div>
+                <div className="resumen-item">
+                  <label>Ganancia</label>
+                  <div className="valor">{Agro.formatCOP(rentabilidadTotals.totalGanancia)}</div>
+                </div>
+                <div className="resumen-item">
+                  <label>Margen</label>
+                  <div className="valor">{rentabilidadTotals.margen.toFixed(1)}%</div>
+                </div>
+              </div>
+            )}
+            <div className="charts-grid" hidden={!dashboardData || isLoadingDashboard || Boolean(dashboardError) || rentabilidadRows.length === 0}>
               <div className="chart-card">
                 <h3>Rentabilidad por Cultivo (%)</h3>
                 <div className="chart-wrapper">
@@ -4778,7 +4839,7 @@ export default function AdminPanel() {
                 </div>
               </div>
             </div>
-            <div className="table-container">
+            <div className="table-container" hidden={!isValidFincaId(fincaId) || isLoadingDashboard || Boolean(dashboardError) || !dashboardData}>
               <table className="data-table">
                 <thead>
                   <tr>
@@ -4790,7 +4851,9 @@ export default function AdminPanel() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(rentabilidadRows.length ? rentabilidadRows : [{ nombre: '--', ingresos: 0, costo: 0, ganancia: 0, margen: 0 }]).map((r, i) => (
+                  {rentabilidadRows.length === 0 ? (
+                    <tr><td colSpan={5} style={{ textAlign: 'center' }}>Sin datos de rentabilidad</td></tr>
+                  ) : rentabilidadRows.map((r, i) => (
                     <tr key={i}>
                       <td>{r.nombre || '--'}</td>
                       <td>{Agro.formatCOP(r.ingresos)}</td>
