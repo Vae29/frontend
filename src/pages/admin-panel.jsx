@@ -303,14 +303,8 @@ export default function AdminPanel() {
   // Sesión actual del usuario; se usa para validar rol de administrador.
   const session = useAuthSession()
   // Hook para efectos de sonido de retroalimentación auditiva
-  const { playSuccess, playError, playDisable, playWarning, playClick, setMute, isMuted } = useSounds()
+  const { playSuccess, playError, playDisable, playWarning } = useSounds()
   const accountFullName = [session?.nombre, session?.apellidos].filter(Boolean).join(' ') || session?.email || 'Cuenta'
-
-  const [soundsEnabled, setSoundsEnabled] = useState(() => {
-    const stored = localStorage.getItem('soundsEnabled')
-    if (stored !== null) return stored === 'true'
-    return !isMuted()
-  })
 
   const [darkModeEnabled, setDarkModeEnabled] = useState(() => {
     const stored = localStorage.getItem('darkModeEnabled')
@@ -650,18 +644,6 @@ export default function AdminPanel() {
       timerProgressBar: true,
     })
   }, [playSuccess])
-
-  useEffect(() => {
-    const handleInteractionClick = (event) => {
-      const target = event.target.closest('button.btn, button.btn-icon, button.btn-add, button.btn-primary, button.btn-secondary, button.btn-search, button.logout-btn, button.btn-exportar, button.btn-reporte, a.nav-link')
-      if (!target) return
-      if (target.closest('.swal2-popup')) return
-      playClick()
-    }
-
-    document.addEventListener('click', handleInteractionClick)
-    return () => document.removeEventListener('click', handleInteractionClick)
-  }, [playClick])
 
     const fetchDashboardData = useCallback(
     async (selectedFincaId, month, year) => {
@@ -1165,11 +1147,6 @@ export default function AdminPanel() {
     },
     []
   )
-
-  useEffect(() => {
-    localStorage.setItem('soundsEnabled', soundsEnabled)
-    setMute(!soundsEnabled)
-  }, [soundsEnabled, setMute])
 
   useEffect(() => {
     localStorage.setItem('darkModeEnabled', darkModeEnabled)
@@ -4759,21 +4736,6 @@ export default function AdminPanel() {
             </div>
 
             <div className="config-section">
-              <div className="config-card">
-                <div>
-                  <h3>Sonidos del Sistema</h3>
-                  <p>Activa o desactiva todos los efectos de sonido del panel administrativo.</p>
-                </div>
-                <label className="toggle-switch">
-                  <input
-                    type="checkbox"
-                    checked={soundsEnabled}
-                    onChange={() => setSoundsEnabled((prev) => !prev)}
-                  />
-                  <span className="slider"></span>
-                </label>
-              </div>
-
               <div className="config-card">
                 <div>
                   <h3>Modo Oscuro</h3>
