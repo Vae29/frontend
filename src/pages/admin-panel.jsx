@@ -20,6 +20,7 @@ import { fetchFincas, createFinca, updateFinca, deleteFinca, changeFincaState } 
 import { fetchDashboardForFinca } from '../services/dashboardService'
 import { fetchCultivosPorFinca, fetchTiposCultivo, fetchEstados, createCultivo, updateCultivo, deleteCultivo, fetchCultivoDetalle, fetchCategoriasCosto, fetchSubcategoriasPorCategoria, fetchEstadosPago, fetchUnidadesMedida, fetchTiposPrecio, fetchEtapaEnProcesoPorCultivo, fetchEtapasPorCultivo, validateCultivoForCost, createCosto, updateCosto, deleteCosto, fetchCostosPorFinca, fetchCosechasPorCultivo, createCosecha, updateCosecha, deleteCosecha, fetchAllEtapasCatalog, createEtapaForCultivo, updateEtapaForCultivo, deleteEtapaForCultivo, changeCostoState, changeCultivoState, changeEtapaState, changeCosechaState } from '../services/cultivoService'
 import * as reportService from '../services/reportService'
+import { filterCostsByCategoryId } from '../utils/costFilters'
 
 import { MODAL_TYPES, DEPARTAMENTOS, MUNICIPIOS_POR_DEPARTAMENTO, normalizeModalTextFields } from '../utils/modalConfig'
 import Swal from 'sweetalert2'
@@ -2749,7 +2750,7 @@ export default function AdminPanel() {
     }
 
     if (generalCostoFilterCategoria && generalCostoFilterCategoria !== 'todos') {
-      filtered = filtered.filter((costo) => String(costo.categoria || '').trim() === String(generalCostoFilterCategoria).trim())
+      filtered = filterCostsByCategoryId(filtered, generalCostoFilterCategoria)
     }
 
     if (generalCostoFilterUsuario && generalCostoFilterUsuario !== 'todos') {
@@ -4495,10 +4496,11 @@ export default function AdminPanel() {
                   onChange={(e) => setGeneralCostoFilterCategoria(e.target.value)}
                 >
                   <option value="todos">Todos</option>
-                  <option value="Mano de Obra">Mano de Obra</option>
-                  <option value="Materia Prima">Materia Prima</option>
-                  <option value="Servicios">Servicios</option>
-                  <option value="Costos Indirectos">Costos Indirectos</option>
+                  {costoCategoriaOptions.map((categoria) => (
+                    <option key={categoria.id} value={categoria.id}>
+                      {categoria.nombre}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="filter-wrapper">
