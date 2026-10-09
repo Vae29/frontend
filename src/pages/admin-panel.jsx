@@ -4622,8 +4622,9 @@ export default function AdminPanel() {
                     visibleCostosGenerales.map((costo) => {
                       const isMp = String(costo.categoria || '').toLowerCase() === 'materia prima'
                       const categoryKey = normalizeKey(costo.categoria || 'sin subcategoria').replace(/\s+/g, '-')
+                      const subcategoryKey = normalizeKey(costo.subcategoria || 'sin subcategoria').replace(/\s+/g, '-')
                       const categoriaClass = `cg-badge-categoria cat-${categoryKey}`
-                      const subcategoriaClass = `cg-badge-subcategoria sub-cat-${categoryKey}`
+                      const subcategoriaClass = `cg-badge-subcategoria sub-cat-${subcategoryKey}`
                       const estadoClass = `status-badge status-${normalizeKey(costo.estado_pago || '').replace(/\s+/g, '-')}`
                       const cultivoClass = 'cg-badge-cultivo'
 

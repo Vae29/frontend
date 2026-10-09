@@ -1419,46 +1419,20 @@ html.dark-mode .config-card h3 {
 }
 
 .cg-badge-subcategoria {
-    color: #ffffff;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    color: #263442;
+    background-color: #edf2f7;
+    border: 1px solid #cbd5e1;
+    box-shadow: 0 2px 8px rgba(38, 52, 66, 0.08);
     border-radius: 10px;
     padding: 6px 10px;
     text-transform: none;
 }
 
-.cg-badge-subcategoria.sub-cat-mano-de-obra {
-    background-color: rgba(46, 125, 50, 0.12);
-    color: #145a22;
-}
-
-.cg-badge-subcategoria.sub-cat-mano-de-obra-directa {
-    background-color: rgba(46, 125, 50, 0.12);
-    color: #145a22;
-}
-
-.cg-badge-subcategoria.sub-cat-materia-prima {
-    background-color: rgba(21, 101, 192, 0.12);
-    color: #083a63;
-}
-
-.cg-badge-subcategoria.sub-cat-servicios {
-    background-color: rgba(106, 27, 154, 0.12);
-    color: #3e0f52;
-}
-
-.cg-badge-subcategoria.sub-cat-contratos-de-servicios {
-    background-color: rgba(106, 27, 154, 0.12);
-    color: #3e0f52;
-}
-
-.cg-badge-subcategoria.sub-cat-costos-indirectos {
-    background-color: rgba(255, 111, 0, 0.12);
-    color: #b35a00;
-}
-
-.cg-badge-subcategoria.sub-cat-sin-subcategoria {
-    background-color: #95a5a6;
-    color: #ffffff;
+html.dark-mode .cg-badge-subcategoria {
+    color: var(--text-dark);
+    background-color: #263831;
+    border-color: #50695d;
+    box-shadow: none;
 }
 
 .cg-badge-cultivo {
