@@ -2,6 +2,12 @@
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
+## Netlify SPA routes
+
+The `public/_redirects` rule rewrites application routes such as `/admin` and
+`/worker` to `index.html`, so refreshing a React Router URL does not return a
+Netlify 404. Vite copies this file to `dist` during the production build.
+
 Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
